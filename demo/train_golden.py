@@ -7,12 +7,17 @@ import torch
 import slayerSNN as snn
 
 import demo as cs
+# from demo.nets.nmnist import QLeNetNetwork
 
-EPOCHS_NUM = 200
+EPOCHS_NUM = 100
 
 # Generalized network/dataset initialization
 device = torch.device('cuda')
-net = cs.Network(cs.net_params, cs.DO_ENABLED).to(device)
+net = cs.Network(cs.net_params, do_enable=cs.DO_ENABLED).to(device)
+# net: cs.Network = torch.load(os.path.join(cs.OUT_DIR, "original.pt"))
+# net.eval()
+# net.__class__ = QLeNetNetwork
+# net.precision = 6
 trial = cs.trial_def
 
 spike_loss = snn.loss(cs.net_params).to(device)
@@ -21,10 +26,14 @@ stats = snn.utils.stats()
 
 print("Training configuration:")
 print(f"  - case study: {cs.CASE_STUDY}")
+if cs.CASE_STUDY.startswith('q'):
+    print(f"  - precision: {net.precision}")
 print(f"  - dropout: {'yes' if cs.DO_ENABLED else 'no'}")
 print(f"  - epochs num: {EPOCHS_NUM}")
 print(f"  - trial: {trial or 0}")
 print()
+
+torch.save(net, os.path.join(cs.OUT_DIR, "erbing", f"{cs.CASE_STUDY}_q9_t1_e0.pt"))
 
 for epoch in range(EPOCHS_NUM):
     tSt = datetime.now()
@@ -63,12 +72,14 @@ for epoch in range(EPOCHS_NUM):
 
     stats.update()
 
+    torch.save(net, os.path.join(cs.OUT_DIR, "erbing", f"{cs.CASE_STUDY}_q9_t1_e{epoch+1}.pt"))
+
     # Save trained network (based on the best testing accuracy)
-    if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
-        torch.save(net, os.path.join(cs.OUT_DIR, cs.get_fnetname(trial)))
+    # if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
+    #     torch.save(net, os.path.join(cs.OUT_DIR, "quantized.pt"))
 
 # Save statistics
-with open(os.path.join(cs.OUT_DIR, cs.get_fstaname(trial)), 'wb') as stats_file:
+with open(os.path.join(cs.OUT_DIR, "erbing", f"{cs.CASE_STUDY}_q9_t1.pkl"), 'wb') as stats_file:
     pickle.dump(stats, stats_file)
 
 # Plot and save the training results
@@ -85,4 +96,5 @@ plt.yticks(ticks=range(0, 100, 2), minor=True)
 plt.grid(visible=True, which='both', axis='both')
 plt.xlim((1, EPOCHS_NUM))
 plt.ylim((0., 100.))
-plt.savefig(os.path.join(cs.OUT_DIR, cs.get_ffigname(trial)))
+# plt.savefig(os.path.join(cs.OUT_DIR, cs.get_ffigname(trial)))
+plt.savefig(os.path.join(cs.OUT_DIR, "erbing", f"{cs.CASE_STUDY}_t1_q9.png"))

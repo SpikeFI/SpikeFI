@@ -52,3 +52,23 @@ def quant_args_from_range(xmin: float | Tensor, xmax: float | Tensor,
     zero_point = torch.clip(qmin - xmin / scale, qmin, qmax).int()
 
     return scale, zero_point, dtype
+
+
+def quantize_exact(xmin: float | Tensor, xmax: float | Tensor,
+                   bit_precision: int) -> tuple[Tensor, Tensor]:
+    if not torch.is_tensor(xmin):
+        xmin = torch.tensor(xmin)
+    if not torch.is_tensor(xmax):
+        xmax = torch.tensor(xmax)
+    xmin = xmin.float()
+    xmax = xmax.float()
+
+    assert xmin.size() == xmax.size()
+
+    qmin = int(0)
+    qmax = int(2**bit_precision - 1)
+
+    scale = ((xmax - xmin) / (qmax - qmin))
+    zero_point = torch.clip(qmin - xmin / scale, qmin, qmax)
+
+    return scale, zero_point

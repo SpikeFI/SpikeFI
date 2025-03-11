@@ -32,6 +32,8 @@ if 'nmnist' in CASE_STUDY:
         from demo.nets.nmnist import NMNISTNetwork as Network
     elif CASE_STUDY == 'nmnist-lenet':
         from demo.nets.nmnist import LeNetNetwork as Network
+    elif CASE_STUDY == 'qnmnist-lenet':
+        from demo.nets.nmnist import QLeNetNetwork as Network
     else:
         raise _exception
 elif CASE_STUDY == 'gesture':
