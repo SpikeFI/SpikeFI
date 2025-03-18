@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spikefi"
+version = "1.0.0"
+description = "An automated fault injection framework for deep spiking neural network applications"
+authors = [
+    { name = "Theofilos Spyrou", email = "Theofilos.Spyrou@gmail.com" }
+]
+dependencies = [
+    "matplotlib>=3.7.5",
+    "numpy==1.26.4",
+    "pyyaml>=6.0.2",
+    "h5py>=3.9.0",
+    "torch>=2.1.2",
+    "slayerSNN"
+]
+requires-python = ">=3.11.0"
+readme = "README.md"
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+packages = ["spikefi", "spikefi.utils"]
