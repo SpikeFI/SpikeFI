@@ -59,7 +59,7 @@ SLAYER requires a CUDA-enabled GPU for training SNN models.
 
 To properly install SpikeFI, please follow the instructions below at the correct order. A clean environment of Python is recommended (e.g., using conda).
 
-#### 1. Clone the repository
+### 1. Clone the repository
 
 Clone the SpikeFI and SLAYER repositories to the directory of your preference:
 
@@ -68,19 +68,19 @@ git clone https://github.com/SpikeFI/SpikeFI.git
 git clone https://github.com/bamsumit/slayerPytorch.git
 ```
 
-#### 2. Install PyTorch
+### 2. Install PyTorch
 
 Install any version of PyTorch from 2.1.2 onwards with the combination of the CUDA version supported by your system. For example, to install the latest version of PyTorch (i.e., 2.6.0 at the moment of writing) with CUDA 12.6 execute the following command:
 
 `pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126`
 
-#### 3. Install the requirements
+### 3. Install the requirements
 
 All the requirements are listed in the `requirements.txt` file. To install them you can use the following command (after switching to SpikeFI directory):
 
 `pip3 install -r requirements.txt`
 
-#### 4. Install SLAYER
+### 4. Install SLAYER
 
 From __within the SLAYER directory__, run the following command:
 
@@ -88,20 +88,20 @@ From __within the SLAYER directory__, run the following command:
 
 For more information about the SLAYER framework, feel free to visit its GitHub page: https://github.com/bamsumit/slayerPytorch
 
-#### 5. Install SpikeFI
+### 5. Install SpikeFI
 
 Run the following command from SpikeFI directory to install the framework:
 
 `pip3 install .`
 
-#### 6. Putting it altogether
+### 6. Putting it altogether
 
 ``` bash
 git clone https://github.com/SpikeFI/SpikeFI.git
 git clone https://github.com/bamsumit/slayerPytorch.git
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 pip3 install -r ./SpikeFI/requirements.txt
-cd ./slayerSNN/
+cd ./slayerPytorch/
 python3 setup.py install
 cd ../SpikeFI/
 pip3 install .
@@ -117,7 +117,7 @@ The *SpikeFI* package contains the following modules:
 - __visual__: visualization functions
 
 
-### More examples
+## More examples
 
 The additional *demo* package contains some examples demonstrating how to use the features and optimizations of *SpikeFI*:
 - __bitfilp.py__: FI campaign for bitflipped synapse fault model
@@ -126,7 +126,7 @@ The additional *demo* package contains some examples demonstrating how to use th
 - __train_golden.py__: golden training of a SNN with SLAYER
 - __train.py__: FI before/during training of a SNN
 
-### Trained SNNs
+## Trained SNNs
 
 The *nets* subpackage of the *demo* package contains the network classes (defined in SLAYER) for the N-MNIST and IBM's DVS128 Gesture SNNs, along with the classes to load their datasets. The paths to the dataset directories need to be indicated by the user in the .yaml configuration file of the network.
 
