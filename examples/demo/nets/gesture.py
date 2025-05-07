@@ -1,11 +1,18 @@
+import numpy as np
 import torch
-
 import slayerSNN as snn
 
-from demo.nets.neuromorphic import NDataset, NNetwork
 
+class GestureDataset(torch.utils.data.Dataset):
+    def __init__(self, data_path: str, samples_file: str, sampling_time: int, sample_length: int):
+        self.path = data_path
+        self.samples = np.loadtxt(samples_file, dtype='str')
+        self.sampling_time = sampling_time
+        self.n_time_bins = int(sample_length / sampling_time)
 
-class GestureDataset(NDataset):
+    def __len__(self):
+        return self.samples.shape[0]
+
     def __getitem__(self, index):
         input_index = int(self.samples[index, 0])
         class_label = int(self.samples[index, 1].split("/")[1].split(".")[0])
@@ -18,9 +25,11 @@ class GestureDataset(NDataset):
         return input_index, spikes_in, desired_class, class_label
 
 
-class GestureNetwork(NNetwork):
+class GestureNetwork(torch.nn.Module):
     def __init__(self, net_params: snn.params, do_enable=False):
         super(GestureNetwork, self).__init__(net_params)
+
+        self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
         self.SC1 = self.slayer.conv(2, 16, 5, padding=2, weightScale=10)
         self.SC2 = self.slayer.conv(16, 32, 3, padding=1, weightScale=50)

@@ -135,6 +135,8 @@ dmypy.json
 # Datasets
 data/datasets/
 data/datasets
+datasets/
+datasets
 
 # Output
 out/
@@ -144,4 +146,4 @@ paper/
 *.pkl
 
 # Jupyter notebooks
-*.ipynb
+playground.*

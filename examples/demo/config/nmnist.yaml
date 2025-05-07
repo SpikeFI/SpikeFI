@@ -17,8 +17,4 @@ training:
         tgtSpikeRegion: {start: 0, stop: 300}    # only valid for NumSpikes and ProbSpikes
         tgtSpikeCount: {true: 60, false: 10}    # only valid for NumSpikes
     path:
-        # out:     OutFiles/
-        dir_train:  data/datasets/nmnist/Train/
-        dir_test:   data/datasets/nmnist/Test/
-        list_train: data/datasets/nmnist/Train/Train60K.txt
-        list_test:  data/datasets/nmnist/Test/Test10K.txt
+        root_dir:   datasets/N-MNIST/
