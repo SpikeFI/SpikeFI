@@ -20,12 +20,14 @@ import re
 
 
 OUT_DIR = 'out'
-RES_DIR = 'out/res'
-FIG_DIR = 'out/fig'
+RES_DIR = os.path.join(OUT_DIR, 'res')
+FIG_DIR = os.path.join(OUT_DIR, 'fig')
+NET_DIR = os.path.join(OUT_DIR, 'net')
 
 
 def make_filepath(filename: str, parentdir: str = '') -> str:
-    return os.path.join(os.getcwd(), parentdir, filename)
+    os.makedirs(parentdir, exist_ok=True)
+    return os.path.join(parentdir, filename)
 
 
 def make_out_filepath(filename: str) -> str:
@@ -40,7 +42,14 @@ def make_res_filepath(filename: str) -> str:
     return make_filepath(filename, RES_DIR)
 
 
+def make_net_filepath(filename: str) -> str:
+    return make_filepath(filename, NET_DIR)
+
+
 def calculate_trial(filename: str, parentdir: str) -> int:
+    if not os.path.isdir(parentdir):
+        return 0
+
     fname, extension = os.path.splitext(filename)
     fnames = [f.removesuffix(extension) for f in os.listdir(parentdir)
               if fname in f and f.endswith(extension)]

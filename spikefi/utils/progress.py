@@ -17,6 +17,7 @@
 
 import re
 from time import sleep, time
+from tqdm import tqdm
 
 
 class CampaignProgress:
@@ -36,6 +37,8 @@ class CampaignProgress:
         self.end_time = 0.
 
         self._flush_lines_num = 0
+
+        self.pbar = tqdm(total=self.iter_num, leave=False)
 
     def __str__(self) -> str:
         s = "|  Batch #  | Total time | Progress |\n"
@@ -77,7 +80,18 @@ class CampaignProgress:
         self.epoch = 0
         self.batch = 0
 
-    def show(self) -> None:
+    def show(self, mode='verbose') -> None:
+        if mode == 'verbose':
+            self._show_table()
+            self.pbar.refresh()
+        elif mode == 'table':
+            self._show_table()
+        elif mode == 'pbar':
+            self.pbar.refresh()
+        elif mode == 'silent':
+            return
+
+    def _show_table(self):
         print('\033[1A\x1b[2K' * self._flush_lines_num)  # Line up, line clear
         print(self)
 
@@ -90,6 +104,7 @@ class CampaignProgress:
     def step(self) -> None:
         self.status += self.fragment
         self.iter += 1
+        self.pbar.n += 1
 
     def step_batch(self) -> None:
         self.batch += 1
@@ -107,8 +122,9 @@ class CampaignProgress:
             self.end_time = 0.
 
 
-def refresh_progress_job(progress: CampaignProgress, secs: float) -> None:
+def refresh_progress_job(progress: CampaignProgress, secs: float, mode: str = 'verbose') -> None:
     while progress.iter < progress.iter_num:
-        progress.show()
+        progress.show(mode)
         sleep(secs)
-    progress.show()
+    progress.show(mode)
+    progress.pbar.close()

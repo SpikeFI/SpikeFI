@@ -20,7 +20,6 @@ from copy import deepcopy
 from enum import Enum
 from glob import glob
 from itertools import product
-import os
 import pickle
 import random
 from threading import Lock, Thread
@@ -282,12 +281,13 @@ class Campaign:
         self.faulty.forward = MethodType(Campaign._forward_opt_wrapper(self.layers_info, self.slayer), self.faulty)
 
     def run_train(self, epochs: int, train_loader: DataLoader,
-                  optimizer: Optimizer, spike_loss: snn.loss) -> list[nn.Module]:
+                  optimizer: Optimizer, spike_loss: snn.loss,
+                  progress_mode: str = 'verbose') -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(len(train_loader), len(self.rounds), epochs)
-        self.progress_lock = Lock()
-        self.progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1,), daemon=True)
-        self.progress_thread.start()
+        self._progress_lock = Lock()
+        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1, progress_mode,), daemon=True)
+        self._progress_thread.start()
 
         self.faulties = self._pre_run_train()
 
@@ -343,7 +343,8 @@ class Campaign:
         return faulties
 
     def run(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0,
-            opt: CampaignOptimization = CampaignOptimization.FO) -> Tensor | None:
+            opt: CampaignOptimization = CampaignOptimization.FO,
+            progress_mode: str = 'verbose') -> Tensor | None:
         self._pre_run(opt)
 
         # Decide optimization level
@@ -360,9 +361,9 @@ class Campaign:
 
         # Initialize and refresh progress
         self.progress = CampaignProgress(len(test_loader), len(self.rounds))
-        self.progress_lock = Lock()
-        self.progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1,), daemon=True)
-        self.progress_thread.start()
+        self._progress_lock = Lock()
+        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1, progress_mode,), daemon=True)
+        self._progress_thread.start()
 
         # Evaluate faults' effects
         with torch.no_grad():
@@ -445,9 +446,9 @@ class Campaign:
     def _post_run(self, update_stats: bool = True):
         self.duration = self.progress.get_duration_sec()
 
-        self.progress_thread.join()
-        del self.progress_lock
-        del self.progress_thread
+        self._progress_thread.join()
+        del self._progress_lock
+        del self._progress_thread
 
         # Update fault rounds statistics
         if update_stats:
@@ -473,7 +474,7 @@ class Campaign:
                 pre_hook = self._synaptic_pre_hook_wrapper(site.layer, syn_faults)
                 syn_handles[site.layer] = layer.register_forward_pre_hook(pre_hook)
 
-        with self.progress_lock:
+        with self._progress_lock:
             self.progress.reset_epoch()
 
         for _ in range(epochs):
@@ -489,12 +490,12 @@ class Campaign:
 
                 self._advance_performance(output, target, label, spike_loss, training=True)
 
-                with self.progress_lock:
+                with self._progress_lock:
                     self.progress.step()
                     self.progress.step_batch()
                     self.progress.set_train(stat.loss(), stat.accuracy())
 
-            with self.progress_lock:
+            with self._progress_lock:
                 self.progress.step_epoch()
 
             self.performance[self.r_idx].update()
@@ -523,7 +524,7 @@ class Campaign:
 
             self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-            with self.progress_lock:
+            with self._progress_lock:
                 self.progress.step()
                 self.progress.step_batch()
 
@@ -546,10 +547,10 @@ class Campaign:
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-                    with self.progress_lock:
+                    with self._progress_lock:
                         self.progress.step()
 
-            with self.progress_lock:
+            with self._progress_lock:
                 self.progress.step_batch()
 
     def _evaluate_optimized(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0) -> Tensor:
@@ -589,10 +590,10 @@ class Campaign:
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-                    with self.progress_lock:
+                    with self._progress_lock:
                         self.progress.step()
 
-            with self.progress_lock:
+            with self._progress_lock:
                 self.progress.step_batch()
 
         return N_critical
@@ -619,7 +620,7 @@ class Campaign:
 
         if not fname:
             def_fname = sfi_io.rename_if_multiple(self.name + '.pt', sfi_io.RES_DIR)
-            def_fpath = os.path.join(sfi_io.RES_DIR, def_fname)
+            def_fpath = sfi_io.make_res_filepath(def_fname)
 
         torch.save(faulty, def_fpath)
 
@@ -717,7 +718,13 @@ class Campaign:
 class CampaignData:
     def __init__(self, version: str, campaign: Campaign) -> None:
         self.version = version
+
+        pbar = campaign.progress.pbar
+        campaign.progress.pbar = None
+
         cmpn = deepcopy(campaign)
+
+        campaign.progress.pbar = pbar
 
         self.name = cmpn.name
 
@@ -753,7 +760,7 @@ class CampaignData:
     def save(self, fname: str = None) -> None:
         if not fname:
             def_fname = sfi_io.rename_if_multiple(self.name + '.pkl', sfi_io.RES_DIR)
-            def_fpath = os.path.join(sfi_io.RES_DIR, def_fname)
+            def_fpath = sfi_io.make_res_filepath(def_fname)
 
         with open(fname or def_fpath, 'wb') as pkl:
             pickle.dump(self, pkl)
