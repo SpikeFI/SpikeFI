@@ -100,16 +100,18 @@ def _title(cmpns_data: list[CampaignData], data_map: dict,
     return f"{cmpn_name.strip('_')}{model_friendly or ''}{title_def}_{plot_type}{title_suffix or ''}.{format.strip('.')}"
 
 
-def bar(cmpns_data: list[CampaignData],
+def bar(cmpns_data: CampaignData | list[CampaignData],
         model_friendly: str = None, fig_size: tuple[float, float] = None,
         title_suffix: str = None, format: str = 'svg') -> Figure:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     data_map = _data_mapping(cmpns_data)
 
     offset_mult: dict[str, int] = {}
     layers = sorted(list(set(key[0] for key in data_map.keys())))
 
-    fig, ax = plt.subplots()
-    fig.set_size_inches(fig_size)
+    fig, ax = plt.subplots(figsize=fig_size)
     colormap = plt.get_cmap(CMAP)
     width = 3 / len(data_map)
     space = width / 5
@@ -170,10 +172,13 @@ def colormap(format: str = 'svg') -> Figure:
     return fig
 
 
-def heat(cmpns_data: list[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
+def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
          preserve_dim: bool = False, ratio: float = 1.0, max_area: int = 512**2, show_axes: bool = True,
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg') -> list[Figure]:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     figs = []
     data_map = _data_mapping(cmpns_data, layer, fault_model)
     for (lay, fm), cmpn_dict in data_map.items():
@@ -187,7 +192,7 @@ def heat(cmpns_data: list[CampaignData], layer: str = None, fault_model: ff.Faul
             for r in r_idxs:
                 test_stats = cmpns_data[cmpn_idx].performance[r].testing
                 perf.append(test_stats.maxAccuracy)
-        perf = np.array(perf)
+        perf = np.array(perf, dtype=np.float32)
 
         if N > max_area:
             print("Cannot plot heat map for the following layer - fault model pair:")
@@ -248,10 +253,13 @@ def heat(cmpns_data: list[CampaignData], layer: str = None, fault_model: ff.Faul
     return figs
 
 
-def plot(cmpns_data: list[CampaignData], xlabel: str = '', layer: str = None,
+def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer: str = None,
          legend_loc: str = "lower right",
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg') -> Figure:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     data_map = _data_mapping(cmpns_data, layer)
     data_map_sorted = dict(sorted(data_map.items(), key=lambda item: item[0][0]))
     curves: dict[str, list[tuple[float, np.array[float]]]] = {}
@@ -305,8 +313,11 @@ def plot(cmpns_data: list[CampaignData], xlabel: str = '', layer: str = None,
     return fig
 
 
-def plot_train(cmpns_data: list[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
+def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
                title_suffix: str = None, format: str = 'svg') -> Figure:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     accu = [[perf.training.maxAccuracy for perf in cmpn_data.performance] for cmpn_data in cmpns_data]
     mean_accu = np.array(accu).mean(axis=0)
 
@@ -333,8 +344,11 @@ def plot_train(cmpns_data: list[CampaignData], x_range: range, fig_size: tuple[f
     return fig
 
 
-def learning_curve(cmpns_data: list[CampaignData], fig_size: tuple[float, float] = None,
+def learning_curve(cmpns_data: CampaignData | list[CampaignData], fig_size: tuple[float, float] = None,
                    title_suffix: str = None, format: str = 'svg') -> list[Figure]:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     figs = list()
     for cmpn_data in cmpns_data:
         for r, perf in enumerate(cmpn_data.performance):
