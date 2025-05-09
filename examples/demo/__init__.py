@@ -1,6 +1,7 @@
 __all__ = ["Dataset", "Network"]
 
 import os
+import torch
 from torch.utils.data import DataLoader, TensorDataset
 import slayerSNN as snn
 import spikefi.utils.io as sfi_io
@@ -19,6 +20,7 @@ dropout_en = None
 fyaml_name = None
 batch_size = None
 to_shuffle = None
+net_params = None
 shape_in = None
 
 _is_ready = False
@@ -64,7 +66,15 @@ def prepare(casestudy, dropout: bool = False, fyamlname=None, batchsize=None, sh
     _is_ready = True
 
 
-def get_loader(split: str):
+def get_net(filepath: str = None, trial: int = None) -> 'Network':
+    net_path = filepath or sfi_io.make_net_filepath(get_fnetname(trial))
+    net: Network = torch.load(net_path, weights_only=False)
+    net.eval()
+
+    return net
+
+
+def get_loader(split: str) -> DataLoader:
     abs_root_dir = os.path.join(WORK_DIR, net_params['training']['path']['root_dir'])
     dataset = Dataset(
         root_dir=abs_root_dir,
@@ -75,11 +85,11 @@ def get_loader(split: str):
     return DataLoader(dataset=dataset, batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
 
 
-def get_single_loader():
+def get_single_loader() -> DataLoader:
     return DataLoader(TensorDataset(*next(iter(get_loader('Test')))), batch_size=batch_size, shuffle=False)
 
 
-def get_base_fname():
+def get_base_fname() -> str:
     return f"{case_study}{'-do' if dropout_en else ''}"
 
 
