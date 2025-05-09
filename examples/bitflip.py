@@ -1,34 +1,79 @@
-import os
+#############################################################################
+# An example to demonstrate a study of the network's resiliency to bitflips #
+# in the synaptic weights and the importance of the bit positions.          #
+#                                                                           #
+# First, the configuration parameters defining the FI campaigns, need to be #
+# set. The 'layers' parameter selects one or more layers subject to the FI  #
+# experiments; the 'bits' parameter selects the targeted bit positions; and #
+# finally, the 'qdtype' parameter selects the precision of the quantized    #
+# data type. After, preparing the demo environment, loading the network,    #
+# and creating a data loader for the testing set, a nested for loop         #
+# iterates over the targeted layers and bit positions one at a time, in     #
+# order to create a separate campaign object for each combination. Each FI  #
+# campaign then injects a sample of maximum 250^2 synaptic weights with a   #
+# bitflipped synapse error to the synapses of the current layer at the      #
+# current bit position. Each fault is injected as a distinct fault round    #
+# containing a single fault each, so that the network's reliability is      #
+# examined with perspective to each synaptic weight and faulty bit position.#
+# At the end of each FI campaign execution, results are stored in a file    #
+# and are visualized using a heat map plot, which is also saved as an image.#
+#############################################################################
+
+
 import torch
-
 import slayerSNN as snn
-
 import spikefi as sfi
-import demo as cs
+import demo
 
 
-L = ['SF2']     # 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
-B = range(8)    # LSB: bit 0
+# Configuration parameters for the bitflip FI experiments
+# Select one or more layers to target
+layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1'
+# Select the bit positions to target
+bits = range(8)     # LSB is bit 0
+# Select the precision of the quantized integer synaptic weights
 qdtype = torch.uint8
 
-fnetname = cs.get_fnetname(trial='2')
-net: cs.Network = torch.load(os.path.join(cs.OUT_DIR, cs.CASE_STUDY, fnetname))
-net.eval()
+# Setup the fault simulation demo environment
+# Selects the case study, e.g., the LeNet network without dropout
+demo.prepare(casestudy='nmnist-lenet', dropout=False)
 
-for lay_name in L:
+# Load the network
+net = demo.get_net()
+# Create a dataset loader for the testing set
+test_loader = demo.get_loader('Test')
+
+# Calculate total number of FI experiments to be conducted
+cmpns_total = len(layers) * len(bits)
+cmpns_count = 0
+
+# For each targeted layer
+for lay_name in layers:
+    # Find min and max synaptic weights of the layer to use for
+    # the quantization of the layer's synaptic weights
     layer = getattr(net, lay_name)
     wmin = layer.weight.min().item()
     wmax = layer.weight.max().item()
-    for b in B:
-        cmpn_name = fnetname.removesuffix('.pt') + f"_synapse_bitflip_{lay_name or 'ALL'}_b{b}"
-        cmpn = sfi.Campaign(net, cs.shape_in, net.slayer, name=cmpn_name)
 
+    # For each targeted bit position
+    for b in bits:
+        # Create a SpikeFI Campaign with a descriptive name
+        cmpn_name = demo.get_fnetname().removesuffix('.pt') + f"_synapse_bitflip_{lay_name or 'ALL'}_b{b}"
+        cmpn = sfi.Campaign(net, demo.shape_in, net.slayer, name=cmpn_name)
+        cmpns_count += 1
+
+        # Inject bitflipped synapse faults across 250^2 randomly selected synaptic weights in the layer
+        # Creates a separate fault round containing a single fault each
         cmpn.inject_complete(sfi.fm.BitflippedSynapse(b, wmin, wmax, qdtype),
                              [lay_name], fault_sampling_k=250**2)
 
-        print(cmpn.name)
-        cmpn.run(cs.test_loader, spike_loss=snn.loss(cs.net_params).to(cmpn.device))
-        print(f"{cmpn.duration : .2f} secs")
+        # Print status information
+        print(f"Campaign {cmpns_count}/{cmpns_total}: '{cmpn.name}'")
 
+        # Execute FI experiments for current targetted layer and bit position
+        cmpn.run(test_loader, spike_loss=snn.loss(demo.net_params).to(cmpn.device))
+
+        # Visualize results with a heat map
         sfi.visual.heat(cmpn.export(), preserve_dim=True, format='png')
+        # Save results in a pkl file
         cmpn.save()
