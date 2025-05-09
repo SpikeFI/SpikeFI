@@ -80,7 +80,14 @@ class CampaignProgress:
         self.epoch = 0
         self.batch = 0
 
-    def show(self, mode='verbose') -> None:
+    def show(self, mode='') -> None:
+        if not mode:
+            try:
+                get_ipython()
+                mode = 'pbar'
+            except NameError:
+                mode = 'verbose'
+
         if mode == 'verbose':
             self._show_table()
             self.pbar.refresh()
@@ -122,7 +129,7 @@ class CampaignProgress:
             self.end_time = 0.
 
 
-def refresh_progress_job(progress: CampaignProgress, secs: float, mode: str = 'verbose') -> None:
+def refresh_progress_job(progress: CampaignProgress, secs: float, mode: str = '') -> None:
     while progress.iter < progress.iter_num:
         progress.show(mode)
         sleep(secs)

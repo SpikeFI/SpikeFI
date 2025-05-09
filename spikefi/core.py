@@ -282,7 +282,7 @@ class Campaign:
 
     def run_train(self, epochs: int, train_loader: DataLoader,
                   optimizer: Optimizer, spike_loss: snn.loss,
-                  progress_mode: str = 'verbose') -> list[nn.Module]:
+                  progress_mode: str = '') -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(len(train_loader), len(self.rounds), epochs)
         self._progress_lock = Lock()
@@ -344,7 +344,7 @@ class Campaign:
 
     def run(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0,
             opt: CampaignOptimization = CampaignOptimization.FO,
-            progress_mode: str = 'verbose') -> Tensor | None:
+            progress_mode: str = '') -> Tensor | None:
         self._pre_run(opt)
 
         # Decide optimization level
