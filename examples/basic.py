@@ -1,3 +1,22 @@
+#############################################################################
+# A simple example to demonstrate the basic usage of SpikeFI's features.    #
+#                                                                           #
+# After loading a trained network (see 'train_golden' example), a campaign  #
+# object is initiated. First, three faults are defined, namely fx, fy,      #
+# and fz, which are injected in two fault rounds to form various scenarios  #
+# of FI experiments. The classification accuracy of the faulty networks     #
+# is reported for each experiment and the results are stored in a file.     #
+# Continuing, the campaign object is reset and a new FI campaign is         #
+# initiated to perform the complete assessment of the network's output      #
+# layer by injected one bitflipped synapse fault at the MSB of every        #
+# synaptic weight of the layer. Then, the FI experiment targets each        #
+# synapse individually, meaning that only one synapse is faulty at a        #
+# time. Finally, results are plotted in a heat map and stored in a file.    #
+# This example is the implementation of the pseudo-code presented in the    #
+# SpikeFI scientific publication.                                           #
+#############################################################################
+
+
 import torch
 import spikefi as sfi
 from spikefi.models import DeadNeuron, ParametricNeuron, SaturatedSynapse, BitflippedSynapse
@@ -20,17 +39,17 @@ net.eval()
 # Create a dataset loader for the testing set
 test_loader = demo.get_loader('Test')
 
-# Create a spikefi Campaign object for network 'net'
+# Create a SpikeFI Campaign object for network 'net'
 # Spiking-related information is configured by the 'net.slayer' object
 cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 
 # Create 3 different faults
-# Fault 'fx' is a Dead Neuron fault to randonmly target a neuron of layer SF2
+# Fault 'fx' is a Dead Neuron fault to randomly target a neuron of layer SF2
 fx = Fault(DeadNeuron(), FaultSite('SF2'))
-# Fault 'fy' is a Saturated Synapse fault to randonmly target a synapse
+# Fault 'fy' is a Saturated Synapse fault to randomly target a synapse
 # between layers SF1 and its predecessor and set the synaptic weight to 10
 fy = Fault(SaturatedSynapse(10), FaultSite('SF1'))
-# Fault 'fz' is a multiple (4) neuron parametric fault targetting the threshold parameter theta
+# Fault 'fz' is a multiple (4) neuron parametric fault targeting the threshold parameter theta
 # and setting it to half its nominal value in 4 neurons randomly selected across the entire network
 fz = Fault(ParametricNeuron('theta', 0.5), [FaultSite(), FaultSite(), FaultSite(), FaultSite()])
 
@@ -46,7 +65,7 @@ cmpn.run(test_loader, opt=sfi.CampaignOptimization.O4)
 for r, perf in enumerate(cmpn.performance):
     print(f"Round {r} performance: {perf.testing.maxAccuracy * 100.0} %")
 
-# Save the campaign and its results to spikefi -> out -> res -> basic-fi.pkl
+# Save the campaign and its results to SpikeFI -> out -> res -> basic-fi.pkl
 cmpn.save()
 
 # Reset the campaign, i.e., remove all faults and fault rounds
@@ -68,8 +87,10 @@ cmpn.inject_complete(fm, ['SF2'])
 # when only one is faulty at a time
 cmpn.run(test_loader)
 
-# Visualize the results using a heatmap plot stored at spikefi -> fig -> basic-fi_7_heat.png
-sfi.visual.heat(cmpn.export(), preserve_dim=True, format='png')
+# Export campaign data to use with visualization tools
+cmpn_data = cmpn.export()
+# Visualize the results using a heatmap plot stored at SpikeFI -> fig -> basic-fi_7_heat.png
+sfi.visual.heat(cmpn_data, preserve_dim=True, format='png')
 
-# Save the campaign and its results to spikefi -> out -> res -> bitflip_7_SF2.pkl
+# Save the campaign and its results to SpikeFI -> out -> res -> bitflip_7_SF2.pkl
 cmpn.save(sfi.utils.io.make_res_filepath('bitflip_7_SF2.pkl'))
