@@ -15,6 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
+from cycler import cycler
 from difflib import SequenceMatcher
 from itertools import cycle
 from math import prod, sqrt
@@ -58,7 +59,7 @@ def _data_mapping(cmpns_data: list[CampaignData], layer: str = None,
 
 
 def _earth_palette() -> None:
-    mpl.rcParams['axes.prop_cycle'] = [{'color': c} for c in CPAL]
+    mpl.rcParams['axes.prop_cycle'] = cycler(color=CPAL)
 
 
 def _heat_reshape(N: int, R: float) -> tuple[int, int]:
@@ -144,7 +145,7 @@ def bar(cmpns_data: CampaignData | list[CampaignData],
 
         offset_mult[lay] += 1
 
-    ax.set_ylabel("Faults " + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
+    ax.set_ylabel("Faults (%)")
     ax.set_yticks(range(0, 101, 10))
     ax.set_xlabel('Layers')
     ax.set_xticks([i + (width/2 + space/2) * (offset_mult[lay]-1) for i, lay in enumerate(layers)], layers)
@@ -164,7 +165,7 @@ def colormap(format: str = 'svg') -> Figure:
 
     cbar = mpl.colorbar.Colorbar(cax, cmap=CMAP, norm=norm, orientation='horizontal', ticks=range(0, 101, 10))
     cbar.set_ticks(range(0, 100), minor=True)
-    plt.xlabel("Classification Accuracy " + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
+    plt.xlabel("Classification Accuracy (%)")
 
     plot_path = make_fig_filepath(filename="colormap." + format.removeprefix('.'))
     plt.savefig(plot_path, transparent=True)
@@ -294,7 +295,7 @@ def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer:
 
         plt.ylim((0, 100))
         plt.yticks(range(0, 101, 10))
-        plt.ylabel("Classification accuracy " + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
+        plt.ylabel("Classification accuracy (%)")
 
         plt.xlim(np.min(x), np.max(x))
         if np.min(x) not in list(plt.xticks()[0]):
@@ -331,8 +332,8 @@ def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fi
     plt.gca().yaxis.set_minor_locator(MultipleLocator(10))
     plt.ylim([60, 100])
     plt.xlim([x_range[x_slice][0], x_range[-1]])
-    plt.xlabel("Dead neurons " + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
-    plt.ylabel("Mean classification accuracy " + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
+    plt.xlabel("Dead neurons (%)")
+    plt.ylabel("Mean classification accuracy (%)")
     plt.legend()
 
     if title_suffix:
@@ -363,7 +364,7 @@ def learning_curve(cmpns_data: CampaignData | list[CampaignData], fig_size: tupl
             plt.legend(loc='lower right')
 
             plt.xlabel('Epoch #')
-            plt.ylabel("Accuracy " + + r"(\%)" if mpl.rcParams['text.usetex'] else "(%)")
+            plt.ylabel("Accuracy (%)")
             plt.xticks(ticks=[1] + list(range(10, epochs + 1, 10)))
             plt.xticks(ticks=range(2, epochs + 1, 2), minor=True)
             plt.yticks(ticks=range(0, 101, 10))
