@@ -6,7 +6,7 @@
 # set. The 'layers' parameter selects one or more layers subject to the FI  #
 # experiments; the 'bits' parameter selects the targeted bit positions; and #
 # finally, the 'qdtype' parameter selects the precision of the quantized    #
-# data type. After, preparing the demo environment, loading the network,    #
+# data type. Next, preparing the demo environment, loading the network,    #
 # and creating a data loader for the testing set, a nested for loop         #
 # iterates over the targeted layers and bit positions one at a time, in     #
 # order to create a separate campaign object for each combination. Each FI  #
@@ -27,8 +27,8 @@ import demo
 
 
 # Configuration parameters for the bitflip FI experiments
-# Select one or more layers to target
-layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1'
+# Select one or more layers to target (use an empty string '' to select all layers)
+layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select the bit positions to target
 bits = range(8)     # LSB is bit 0
 # Select the precision of the quantized integer synaptic weights
@@ -43,7 +43,7 @@ net = demo.get_net()
 # Create a dataset loader for the testing set
 test_loader = demo.get_loader('Test')
 
-# Calculate total number of FI experiments to be conducted
+# Calculate total number of FI campaigns
 cmpns_total = len(layers) * len(bits)
 cmpns_count = 0
 
@@ -70,10 +70,12 @@ for lay_name in layers:
         # Print status information
         print(f"Campaign {cmpns_count}/{cmpns_total}: '{cmpn.name}'")
 
-        # Execute FI experiments for current targetted layer and bit position
+        # Execute FI experiments for current targeted layer and bit position
         cmpn.run(test_loader, spike_loss=snn.loss(demo.net_params).to(cmpn.device))
 
         # Visualize results with a heat map
-        sfi.visual.heat(cmpn.export(), preserve_dim=True, format='png')
+        # The 'fig' object can be stored in a pickle file for later use/edit
+        fig = sfi.visual.heat(cmpn.export(), preserve_dim=True, format='png')
+
         # Save results in a pkl file
         cmpn.save()

@@ -89,8 +89,10 @@ cmpn.run(test_loader)
 
 # Export campaign data to use with visualization tools
 cmpn_data = cmpn.export()
+
 # Visualize the results using a heatmap plot stored at SpikeFI -> fig -> basic-fi_7_heat.png
-sfi.visual.heat(cmpn_data, preserve_dim=True, format='png')
+# The 'fig' object can be stored in a pickle file for later use/edit
+fig = sfi.visual.heat(cmpn_data, preserve_dim=True, format='png')
 
 # Save the campaign and its results to SpikeFI -> out -> res -> bitflip_7_SF2.pkl
 cmpn.save(sfi.utils.io.make_res_filepath('bitflip_7_SF2.pkl'))
