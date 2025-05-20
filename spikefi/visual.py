@@ -167,7 +167,7 @@ def colormap(format: str = 'svg') -> Figure:
     cbar.set_ticks(range(0, 100), minor=True)
     plt.xlabel("Classification Accuracy (%)")
 
-    plot_path = make_fig_filepath(filename="colormap." + format.removeprefix('.'))
+    plot_path = make_fig_filepath(fname="colormap." + format.removeprefix('.'))
     plt.savefig(plot_path, transparent=True)
 
     return fig

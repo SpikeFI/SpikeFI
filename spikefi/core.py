@@ -22,7 +22,7 @@ from glob import glob
 from itertools import product
 import pickle
 import random
-from threading import Lock, Thread
+from threading import Thread
 from types import MethodType
 from typing import Optional
 from warnings import warn
@@ -200,7 +200,7 @@ class Campaign:
 
     def inject_complete(self, fault_model: ff.FaultModel, layer_names: Iterable[str] = [], fault_sampling_k: int = None) -> list[ff.Fault]:
         if layer_names is not None and not isinstance(layer_names, Iterable) or isinstance(layer_names, str):
-            raise TypeError(f"'{type(layer_names).__name__}' object for layer_names arguement is not iterable or is str")
+            raise TypeError(f"'{type(layer_names).__name__}' object for layer_names argument is not iterable or is str")
 
         if layer_names:
             # Keep only injectable layers
@@ -285,14 +285,14 @@ class Campaign:
                   progress_mode: str = '') -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(len(train_loader), len(self.rounds), epochs)
-        self._progress_lock = Lock()
-        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1, progress_mode,), daemon=True)
+        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 0.1, progress_mode,), daemon=True)
         self._progress_thread.start()
 
         self.faulties = self._pre_run_train()
 
         self.progress.timer()
         for self.r_idx, faulty in enumerate(self.faulties):
+            self.progress.step_round()
             self._evaluate_train(faulty, epochs, train_loader, optimizer, spike_loss)
         self.progress.timer()
 
@@ -314,7 +314,7 @@ class Campaign:
                 layer = getattr(_faulty, layer_name)
 
                 if not round.any_neuronal(layer_name):
-                    # Synaptic faults are (re-)inserted at the beggining of every training epoch
+                    # Synaptic faults are (re-)inserted at the beginning of every training epoch
                     continue
 
                 if not self.layers_info.is_output(layer_name):
@@ -347,8 +347,14 @@ class Campaign:
             progress_mode: str = '') -> Tensor | None:
         self._pre_run(opt)
 
+        # Initialize and refresh progress
+        self.progress = CampaignProgress(len(test_loader), len(self.rounds))
+        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 0.1, progress_mode,), daemon=True)
+        self._progress_thread.start()
+
         # Decide optimization level
         if len(self.rounds) <= 1:
+            self.progress.step_round()
             evaluate_method = self._evaluate_single
             opt = CampaignOptimization.O0
         else:
@@ -358,12 +364,6 @@ class Campaign:
                 evaluate_method = self._evaluate_O1
             else:
                 evaluate_method = self._evaluate_O0
-
-        # Initialize and refresh progress
-        self.progress = CampaignProgress(len(test_loader), len(self.rounds))
-        self._progress_lock = Lock()
-        self._progress_thread = Thread(target=refresh_progress_job, args=(self.progress, 1, progress_mode,), daemon=True)
-        self._progress_thread.start()
 
         # Evaluate faults' effects
         with torch.no_grad():
@@ -400,7 +400,7 @@ class Campaign:
             # Create statistics for fault rounds
             self.performance.append(spikeStats())
 
-        # Sort fault round goups in ascending order of group's earliest layer
+        # Sort fault round groups in ascending order of group's earliest layer
         self.rgroups = dict(sorted(self.rgroups.items(), key=lambda item: -1 if item[0] is None else self.layers_info.index(item[0])))
 
     def _perturb_net(self, round: ff.FaultRound) -> None:
@@ -447,7 +447,6 @@ class Campaign:
         self.duration = self.progress.get_duration_sec()
 
         self._progress_thread.join()
-        del self._progress_lock
         del self._progress_thread
 
         # Update fault rounds statistics
@@ -474,12 +473,13 @@ class Campaign:
                 pre_hook = self._synaptic_pre_hook_wrapper(site.layer, syn_faults)
                 syn_handles[site.layer] = layer.register_forward_pre_hook(pre_hook)
 
-        with self._progress_lock:
-            self.progress.reset_epoch()
-
         for _ in range(epochs):
+            self.progress.step_epoch()
             faulty.train()
+
             for _, (_, input, target, label) in enumerate(train_loader):
+                self.progress.step_batch()
+
                 target = target.to(self.device)
                 output = faulty.forward(input.to(self.device))
 
@@ -490,13 +490,8 @@ class Campaign:
 
                 self._advance_performance(output, target, label, spike_loss, training=True)
 
-                with self._progress_lock:
-                    self.progress.step()
-                    self.progress.step_batch()
-                    self.progress.set_train(stat.loss(), stat.accuracy())
-
-            with self._progress_lock:
-                self.progress.step_epoch()
+                self.progress.set_train(stat.loss(), stat.accuracy())
+                self.progress.step()
 
             self.performance[self.r_idx].update()
 
@@ -518,27 +513,31 @@ class Campaign:
         out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
 
         for _, (_, input, target, label) in enumerate(test_loader):
+            self.progress.step_batch()
             output = self.faulty(input.to(self.device))
             if is_out_faulty:
                 out_neuron_callable(None, (output,))
 
             self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-            with self._progress_lock:
-                self.progress.step()
-                self.progress.step_batch()
+            self.progress.step()
 
     def _evaluate_O0(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
         for round_group in self.rgroups.values():  # For each fault round group
             for self.r_idx in round_group:  # For each fault round
+                self.progress.step_round()
                 self._evaluate_single(test_loader, spike_loss)
 
     def _evaluate_O1(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
         out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
 
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
+            self.progress.step_batch()
+
             for round_group in self.rgroups.values():  # For each fault round group
                 for self.r_idx in round_group:  # For each fault round
+                    self.progress.step_round()
+
                     oround = self.orounds[self.r_idx]
 
                     output = self.faulty(input.to(self.device))
@@ -547,17 +546,15 @@ class Campaign:
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-                    with self._progress_lock:
-                        self.progress.step()
-
-            with self._progress_lock:
-                self.progress.step_batch()
+                    self.progress.step()
 
     def _evaluate_optimized(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0) -> Tensor:
         out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
         N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
 
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
+            self.progress.step_batch()
+
             # Store golden spikes
             golden_spikes = [input.to(self.device)]
             for layer_idx in range(len(self.layers_info)):
@@ -566,6 +563,8 @@ class Campaign:
 
             for round_group in self.rgroups.values():  # For each fault round group
                 for self.r_idx in round_group:  # For each fault round
+                    self.progress.step_round()
+
                     oround = self.orounds[self.r_idx]
                     ls_idx = oround.late_start_idx
                     es_idx = oround.early_stop_idx
@@ -590,11 +589,7 @@ class Campaign:
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
 
-                    with self._progress_lock:
-                        self.progress.step()
-
-            with self._progress_lock:
-                self.progress.step_batch()
+                    self.progress.step()
 
         return N_critical
 
@@ -618,15 +613,11 @@ class Campaign:
         if not faulty:
             return
 
-        if not fname:
-            def_fname = sfi_io.rename_if_multiple(self.name + '.pt', sfi_io.RES_DIR)
-            def_fpath = sfi_io.make_res_filepath(def_fname)
-
-        torch.save(faulty, def_fpath)
+        torch.save(faulty, sfi_io.make_res_filepath((fname or self.name) + '.pt', rename=True))
 
     @staticmethod
-    def load(filename: str) -> 'Campaign':
-        return CampaignData.load(filename).build()
+    def load(fpath: str) -> 'Campaign':
+        return CampaignData.load(fpath).build()
 
     @staticmethod
     def load_many(pathname: str) -> list['Campaign']:
@@ -758,16 +749,12 @@ class CampaignData:
         return campaign
 
     def save(self, fname: str = None) -> None:
-        if not fname:
-            def_fname = sfi_io.rename_if_multiple(self.name + '.pkl', sfi_io.RES_DIR)
-            def_fpath = sfi_io.make_res_filepath(def_fname)
-
-        with open(fname or def_fpath, 'wb') as pkl:
+        with open(sfi_io.make_res_filepath((fname or self.name) + '.pkl', rename=True), 'wb') as pkl:
             pickle.dump(self, pkl)
 
     @staticmethod
-    def load(filename: str) -> 'CampaignData':
-        with open(filename, 'rb') as pkl:
+    def load(fpath: str) -> 'CampaignData':
+        with open(fpath, 'rb') as pkl:
             return pickle.load(pkl)
 
     @staticmethod

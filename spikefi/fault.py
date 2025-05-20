@@ -22,6 +22,7 @@ from math import log2
 from functools import reduce
 from operator import or_
 import random
+import re
 
 from torch import Tensor
 
@@ -122,7 +123,13 @@ class FaultModel:
 
     def get_name(self) -> str:
         name = self.__class__.__name__
-        return 'Custom' if name == FaultModel.__name__ else name
+        return 'CustomFault' if name == FaultModel.__name__ else name
+
+    def get_name_snake_case(self, reverse: bool = True) -> str:
+        words = re.findall(r'[A-Z][a-z]*', self.get_name())
+        words = [word.lower() for word in words]
+
+        return '_'.join(reversed(words) if reverse else words)
 
     def is_neuronal(self) -> bool:
         return self.target in FaultTarget.neuronal()
@@ -394,7 +401,7 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
 
 class OptimizedFaultRound(FaultRound):
     def __init__(self, round: FaultRound, layers_info: LayersInfo, late_start_en: bool = True, early_stop_en: bool = True) -> None:
-        # Sort round's faults in ascending order of faults appearence (late-start layer first)
+        # Sort round's faults in ascending order of faults appearance (late-start layer first)
         super().__init__(FaultRound(sorted(round.items(), key=lambda item: layers_info.index(item[0][0]))))
         self.fault_map = dict(sorted(self.fault_map.items(), key=lambda item: layers_info.index(item[0])))
 

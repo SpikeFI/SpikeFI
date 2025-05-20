@@ -25,32 +25,34 @@ FIG_DIR = os.path.join(OUT_DIR, 'fig')
 NET_DIR = os.path.join(OUT_DIR, 'net')
 
 
-def make_filepath(filename: str, parentdir: str = '') -> str:
+# fname includes file extension
+
+def make_filepath(fname: str, parentdir: str = '', rename: bool = False) -> str:
     os.makedirs(parentdir, exist_ok=True)
-    return os.path.join(parentdir, filename)
+    return os.path.join(parentdir, rename_if_multiple(fname, parentdir) if rename else fname)
 
 
-def make_out_filepath(filename: str) -> str:
-    return make_filepath(filename, OUT_DIR)
+def make_out_filepath(fname: str, rename: bool = False) -> str:
+    return make_filepath(fname, OUT_DIR, rename)
 
 
-def make_fig_filepath(filename: str) -> str:
-    return make_filepath(filename, FIG_DIR)
+def make_fig_filepath(fname: str, rename: bool = False) -> str:
+    return make_filepath(fname, FIG_DIR, rename)
 
 
-def make_res_filepath(filename: str) -> str:
-    return make_filepath(filename, RES_DIR)
+def make_res_filepath(fname: str, rename: bool = False) -> str:
+    return make_filepath(fname, RES_DIR, rename)
 
 
-def make_net_filepath(filename: str) -> str:
-    return make_filepath(filename, NET_DIR)
+def make_net_filepath(fname: str, rename: bool = False) -> str:
+    return make_filepath(fname, NET_DIR, rename)
 
 
-def calculate_trial(filename: str, parentdir: str) -> int:
+def calculate_trial(fname: str, parentdir: str) -> int:
     if not os.path.isdir(parentdir):
         return 0
 
-    fname, extension = os.path.splitext(filename)
+    fname, extension = os.path.splitext(fname)
     fnames = [f.removesuffix(extension) for f in os.listdir(parentdir)
               if fname in f and f.endswith(extension)]
 
@@ -62,11 +64,11 @@ def calculate_trial(filename: str, parentdir: str) -> int:
     return max([int(m.group().strip(' ()')) if m else 0 for m in trial_matches]) + 1
 
 
-def rename_if_multiple(filename: str, parentdir: str) -> str:
-    t = calculate_trial(filename, parentdir)
+def rename_if_multiple(fname: str, parentdir: str) -> str:
+    t = calculate_trial(fname, parentdir)
     if t == 0:
-        return filename
+        return fname
 
-    fname, extension = os.path.splitext(filename)
+    fname, extension = os.path.splitext(fname)
 
     return fname + f" ({t})" + extension
