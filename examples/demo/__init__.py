@@ -8,7 +8,8 @@ import spikefi.utils.io as sfi_io
 
 
 SUPPORTED_CASE_STUDIES = ['nmnist-lenet', 'nmnist-deep', 'gesture']
-WORK_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
+DEMO_DIR = os.path.dirname(__file__)
+WORK_DIR = os.path.join(DEMO_DIR, '..', '..')
 
 sfi_io.OUT_DIR = os.path.join(WORK_DIR, sfi_io.OUT_DIR)
 sfi_io.RES_DIR = os.path.join(WORK_DIR, sfi_io.RES_DIR)
@@ -22,6 +23,8 @@ batch_size = None
 to_shuffle = None
 net_params = None
 shape_in = None
+
+device = torch.device('cuda')
 
 _is_ready = False
 
@@ -47,42 +50,44 @@ def prepare(casestudy, dropout: bool = False, fyamlname=None, batchsize=None, sh
         to_shuffle = shuffle if shuffle is not None else False
         shape_in = (2, 34, 34)
 
-        from demo.nets.nmnist import NMNISTDataset as Dataset
+        from demo.architectures.nmnist import NMNISTDataset as Dataset
         if case_study == 'nmnist-lenet':
-            from demo.nets.nmnist import LeNetNetwork as Network
+            from demo.architectures.nmnist import LeNetNetwork as Network
         elif case_study == 'nmnist-deep':
-            from demo.nets.nmnist import NMNISTNetwork as Network
+            from demo.architectures.nmnist import NMNISTNetwork as Network
     elif case_study == 'gesture':
         fyaml_name = fyamlname or 'gesture.yaml'
         batch_size = batchsize or 4
         to_shuffle = shuffle if shuffle is not None else True
         shape_in = (2, 128, 128)
 
-        from demo.nets.gesture import GestureDataset as Dataset
-        from demo.nets.gesture import GestureNetwork as Network
+        from demo.architectures.gesture import GestureDataset as Dataset
+        from demo.architectures.gesture import GestureNetwork as Network
 
     net_params = snn.params(os.path.join(os.path.dirname(__file__), f'config/{fyaml_name}'))
 
     _is_ready = True
 
 
-def get_net(filepath: str = None, trial: int = None) -> 'Network':
-    net_path = filepath or sfi_io.make_net_filepath(get_fnetname(trial))
-    net: Network = torch.load(net_path, weights_only=False)
+def get_net(fpath: str = None, trial: int = None) -> 'Network':
+    net = Network(net_params, dropout_en).to(device)
+    net_path = fpath or sfi_io.make_net_filepath(get_fnetname(trial))
+    net.load_state_dict(torch.load(net_path, weights_only=True))
     net.eval()
 
     return net
 
 
-def get_loader(split: str) -> DataLoader:
-    abs_root_dir = os.path.join(WORK_DIR, net_params['training']['path']['root_dir'])
-    dataset = Dataset(
-        root_dir=abs_root_dir,
+def get_dataset(split: str) -> 'Dataset':
+    return Dataset(
+        root_dir=os.path.join(WORK_DIR, net_params['training']['path']['root_dir']),
         split=split,
         sampling_time=net_params['simulation']['Ts'],
         sample_length=net_params['simulation']['tSample'])
 
-    return DataLoader(dataset=dataset, batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
+
+def get_loader(split: str) -> DataLoader:
+    return DataLoader(dataset=get_dataset(split), batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
 
 
 def get_single_loader() -> DataLoader:

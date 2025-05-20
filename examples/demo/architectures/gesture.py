@@ -5,6 +5,8 @@ import slayerSNN as snn
 
 class GestureDataset(torch.utils.data.Dataset):
     def __init__(self, data_path: str, samples_file: str, sampling_time: int, sample_length: int):
+        super().__init__()
+
         self.path = data_path
         self.samples = np.loadtxt(samples_file, dtype='str')
         self.sampling_time = sampling_time
@@ -27,7 +29,7 @@ class GestureDataset(torch.utils.data.Dataset):
 
 class GestureNetwork(torch.nn.Module):
     def __init__(self, net_params: snn.params, do_enable=False):
-        super(GestureNetwork, self).__init__(net_params)
+        super().__init__()
 
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 

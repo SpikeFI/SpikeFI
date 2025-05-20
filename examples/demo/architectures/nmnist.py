@@ -5,6 +5,7 @@ import slayerSNN as snn
 
 class NMNISTDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir: str, split: str, sampling_time: int, sample_length: int, transform=None):
+        super().__init__()
 
         self.root_dir = root_dir
         self.split_dir = os.path.join(root_dir, split)
@@ -44,7 +45,7 @@ class NMNISTDataset(torch.utils.data.Dataset):
 
 class LeNetNetwork(torch.nn.Module):
     def __init__(self, net_params: snn.params, do_enable=False):
-        super(LeNetNetwork, self).__init__(net_params)
+        super().__init__()
 
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
@@ -83,7 +84,7 @@ class LeNetNetwork(torch.nn.Module):
 
 class NMNISTNetwork(torch.nn.Module):
     def __init__(self, net_params: snn.params, do_enable=False):
-        super(NMNISTNetwork, self).__init__(net_params)
+        super().__init__()
 
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
