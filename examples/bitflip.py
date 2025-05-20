@@ -6,12 +6,12 @@
 # set. The 'layers' parameter selects one or more layers subject to the FI  #
 # experiments; the 'bits' parameter selects the targeted bit positions; and #
 # finally, the 'qdtype' parameter selects the precision of the quantized    #
-# data type. Next, preparing the demo environment, loading the network,    #
+# data type. Next, preparing the demo environment, loading the network,     #
 # and creating a data loader for the testing set, a nested for loop         #
 # iterates over the targeted layers and bit positions one at a time, in     #
 # order to create a separate campaign object for each combination. Each FI  #
 # campaign then injects a sample of maximum 250^2 synaptic weights with a   #
-# bitflipped synapse error to the synapses of the current layer at the      #
+# bit-flipped synapse error to the synapses of the current layer at the     #
 # current bit position. Each fault is injected as a distinct fault round    #
 # containing a single fault each, so that the network's reliability is      #
 # examined with perspective to each synaptic weight and faulty bit position.#
@@ -20,6 +20,7 @@
 #############################################################################
 
 
+import os
 import torch
 import slayerSNN as snn
 import spikefi as sfi
@@ -27,7 +28,7 @@ import demo
 
 
 # Configuration parameters for the bitflip FI experiments
-# Select one or more layers to target (use an empty string '' to select all layers)
+# Select one or more layers to target (use an empty string '' to target the whole network)
 layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select the bit positions to target
 bits = range(8)     # LSB is bit 0
@@ -39,7 +40,7 @@ qdtype = torch.uint8
 demo.prepare(casestudy='nmnist-lenet', dropout=False)
 
 # Load the network
-net = demo.get_net()
+net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 # Create a dataset loader for the testing set
 test_loader = demo.get_loader('Test')
 

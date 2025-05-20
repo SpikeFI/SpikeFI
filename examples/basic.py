@@ -17,6 +17,7 @@
 #############################################################################
 
 
+import os
 import torch
 import spikefi as sfi
 from spikefi.models import DeadNeuron, ParametricNeuron, SaturatedSynapse, BitflippedSynapse
@@ -29,12 +30,8 @@ import demo
 # Selects the case study, e.g., the LeNet network without dropout
 demo.prepare(casestudy='nmnist-lenet', dropout=False)
 
-# Select the network file from directory, e.g., SpikeFI -> out -> net -> nmnist-lenet_net.py
-net_path = sfi.utils.io.make_net_filepath(demo.get_fnetname())
 # Load the network
-net: demo.Network = torch.load(net_path, weights_only=False)
-# Configure the network to the evaluation mode (network is already trained)
-net.eval()
+net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
 # Create a dataset loader for the testing set
 test_loader = demo.get_loader('Test')
@@ -95,4 +92,4 @@ cmpn_data = cmpn.export()
 fig = sfi.visual.heat(cmpn_data, preserve_dim=True, format='png')
 
 # Save the campaign and its results to SpikeFI -> out -> res -> bitflip_7_SF2.pkl
-cmpn.save(sfi.utils.io.make_res_filepath('bitflip_7_SF2.pkl'))
+cmpn.save(sfi.utils.io.make_res_filepath('bitflip_7_SF2.pkl', rename=True))

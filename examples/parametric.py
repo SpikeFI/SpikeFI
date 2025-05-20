@@ -27,13 +27,14 @@
 #############################################################################
 
 
+import os
 import slayerSNN as snn
 import spikefi as sfi
 import demo
 
 
 # Configuration parameters for the neuron parametric FI experiments
-# Select one or more layers to target (use an empty string '' to select all layers)
+# Select one or more layers to target (use an empty string '' to target the whole network)
 layers = ['SC2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select one or more neuron parameters to target
 params = ['theta']  # For example: 'theta', 'tauSr', 'tauRef'
@@ -45,7 +46,7 @@ percent = range(10, 301, 10)    # For example: from 10% to 300% with a step of 1
 demo.prepare(casestudy='nmnist-lenet', dropout=False)
 
 # Load the network
-net = demo.get_net()
+net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 # Create a dataset loader for the testing set
 test_loader = demo.get_loader('Test')
 
