@@ -15,8 +15,4 @@ training:
         tgtSpikeRegion: {start: 0, stop: 1450}    # only valid for NumSpikes and ProbSpikes
         tgtSpikeCount: {true: 180, false: 30}    # only valid for NumSpikes
     path:
-        # IBM DVS-Gesture Dataset
-        dir_train:  data/datasets/IBM DVS/DVS Gesture dataset/DvsGestureNpy/
-        dir_test:   data/datasets/IBM DVS/DVS Gesture dataset/DvsGestureNpy/
-        list_train: data/datasets/IBM DVS/DVS Gesture dataset/DvsGestureNpy/train.txt
-        list_test:  data/datasets/IBM DVS/DVS Gesture dataset/DvsGestureNpy/test.txt
+        root_dir:   datasets/DVS Gesture/

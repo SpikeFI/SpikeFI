@@ -28,10 +28,10 @@ class NMNISTDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        filepath = self.samples[idx]
+        fpath = self.samples[idx]
         label = self.labels[idx]
 
-        spikes_in = snn.io.read2Dspikes(filepath) \
+        spikes_in = snn.io.read2Dspikes(fpath) \
             .toSpikeTensor(torch.zeros((2, 34, 34, self.n_time_bins)), self.sampling_time)
 
         target = torch.zeros((10, 1, 1, 1))

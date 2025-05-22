@@ -1,30 +1,43 @@
-import numpy as np
 import torch
+import os
 import slayerSNN as snn
 
 
 class GestureDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path: str, samples_file: str, sampling_time: int, sample_length: int):
+    def __init__(self, root_dir: str, split: str, sampling_time: int, sample_length: int, transform=None):
         super().__init__()
 
-        self.path = data_path
-        self.samples = np.loadtxt(samples_file, dtype='str')
+        self.root_dir = root_dir
+        self.split_dir = os.path.join(root_dir, split)
+        self.transform = transform
+
         self.sampling_time = sampling_time
         self.n_time_bins = int(sample_length / sampling_time)
 
+        self.samples = []
+        self.labels = []
+
+        for label in range(11):
+            label_dir = os.path.join(self.split_dir, str(label))
+            for fname in os.listdir(label_dir):
+                if fname.endswith('.npy'):
+                    self.samples.append(os.path.join(label_dir, fname))
+                    self.labels.append(label)
+
     def __len__(self):
-        return self.samples.shape[0]
+        return len(self.samples)
 
-    def __getitem__(self, index):
-        input_index = int(self.samples[index, 0])
-        class_label = int(self.samples[index, 1].split("/")[1].split(".")[0])
+    def __getitem__(self, idx):
+        fpath = self.samples[idx]
+        label = self.labels[idx]
 
-        spikes_in = snn.io.readNpSpikes(f"{self.path}{self.samples[index, 1]}") \
+        spikes_in = snn.io.readNpSpikes(fpath) \
             .toSpikeTensor(torch.zeros((2, 128, 128, self.n_time_bins)), self.sampling_time)
-        desired_class = torch.zeros((11, 1, 1, 1))
-        desired_class[class_label, ...] = 1
 
-        return input_index, spikes_in, desired_class, class_label
+        target = torch.zeros((11, 1, 1, 1))
+        target[label, ...] = 1
+
+        return idx, spikes_in, target, label
 
 
 class GestureNetwork(torch.nn.Module):

@@ -33,7 +33,7 @@ def is_demo_ready():
     return _is_ready
 
 
-def prepare(casestudy, dropout: bool = False, fyamlname=None, batchsize=None, shuffle=None):
+def prepare(casestudy: str, dropout: bool = False, fyamlname=None, batchsize=None, shuffle=None):
     global case_study, dropout_en, fyaml_name, batch_size, to_shuffle, shape_in, _is_ready
     global Dataset, Network
     global net_params
@@ -64,7 +64,7 @@ def prepare(casestudy, dropout: bool = False, fyamlname=None, batchsize=None, sh
         from demo.architectures.gesture import GestureDataset as Dataset
         from demo.architectures.gesture import GestureNetwork as Network
 
-    net_params = snn.params(os.path.join(os.path.dirname(__file__), f'config/{fyaml_name}'))
+    net_params = snn.params(os.path.join(DEMO_DIR, f'config/{fyaml_name}'))
 
     _is_ready = True
 
