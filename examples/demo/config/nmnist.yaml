@@ -17,4 +17,4 @@ training:
         tgtSpikeRegion: {start: 0, stop: 300}    # only valid for NumSpikes and ProbSpikes
         tgtSpikeCount: {true: 60, false: 10}    # only valid for NumSpikes
     path:
-        root_dir:   datasets/N-MNIST/
+        root_dir:   demo/datasets/N-MNIST/

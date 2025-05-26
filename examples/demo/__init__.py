@@ -1,4 +1,6 @@
-__all__ = ["Dataset", "Network"]
+__all__ = ["architectures", "utils", "setup_nmnist", "setup_gesture",
+           "Dataset", "Network"
+           ]
 
 import os
 import torch
@@ -9,7 +11,7 @@ import spikefi.utils.io as sfi_io
 
 SUPPORTED_CASE_STUDIES = ['nmnist-lenet', 'nmnist-deep', 'gesture']
 DEMO_DIR = os.path.dirname(__file__)
-WORK_DIR = os.path.join(DEMO_DIR, '..', '..')
+WORK_DIR = os.path.join(DEMO_DIR, '..')
 
 sfi_io.OUT_DIR = os.path.join(WORK_DIR, sfi_io.OUT_DIR)
 sfi_io.RES_DIR = os.path.join(WORK_DIR, sfi_io.RES_DIR)

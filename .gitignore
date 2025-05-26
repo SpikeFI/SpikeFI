@@ -133,10 +133,7 @@ dmypy.json
 *.code-workspace
 
 # Datasets
-data/datasets/
-data/datasets
-datasets/
-datasets
+datasets*/
 
 # Output
 out/
