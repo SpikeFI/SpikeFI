@@ -76,7 +76,8 @@ for lay_name in layers:
 
         # Visualize results with a heat map
         # The 'fig' object can be stored in a pickle file for later use/edit
-        fig = sfi.visual.heat(cmpn.export(), preserve_dim=True, format='png')
+        preserve_dim = 'nmnist' in demo.case_study
+        fig = sfi.visual.heat(cmpn.export(), preserve_dim=preserve_dim, format='png')
 
         # Save results in a pkl file
         cmpn.save()
