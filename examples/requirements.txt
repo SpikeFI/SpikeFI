@@ -1,0 +1,8 @@
+dv>=1.0
+matplotlib>=3.7
+numpy~=1.26
+Requests>=2.32
+spikefi>=1.0
+torch>=2.1
+torchvision>=0.16
+tqdm>=4.67
