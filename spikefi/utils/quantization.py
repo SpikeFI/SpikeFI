@@ -35,6 +35,17 @@ def q2i_dtype(qdtype: torch.dtype) -> torch.dtype:
 
 def quant_args_from_range(xmin: float | Tensor, xmax: float | Tensor,
                           dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
+    dt_info = torch.iinfo(dtype)
+    qmin = dt_info.min
+    qmax = dt_info.max
+
+    scale, zero_point = quantize_exact(xmin, xmax, qmin, qmax)
+
+    return scale, zero_point, dtype
+
+
+def quantize_exact(xmin: float | Tensor, xmax: float | Tensor,
+                   qmin: int, qmax: int) -> tuple[Tensor, Tensor]:
     if not torch.is_tensor(xmin):
         xmin = torch.tensor(xmin)
     if not torch.is_tensor(xmax):
@@ -44,11 +55,12 @@ def quant_args_from_range(xmin: float | Tensor, xmax: float | Tensor,
 
     assert xmin.size() == xmax.size()
 
-    dt_info = torch.iinfo(dtype)
-    qmin = dt_info.min
-    qmax = dt_info.max
-
     scale = ((xmax - xmin) / (qmax - qmin))
     zero_point = torch.clip(qmin - xmin / scale, qmin, qmax).int()
 
-    return scale, zero_point, dtype
+    return scale, zero_point
+
+
+def quantize_precision(xmin: float | Tensor, xmax: float | Tensor,
+                       p: int) -> tuple[Tensor, Tensor]:
+    return quantize_exact(xmin, xmax, 0, 2**p-1)
