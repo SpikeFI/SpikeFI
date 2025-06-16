@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from enum import Enum
 from glob import glob
+from importlib.metadata import version
 from itertools import cycle, product
 import pickle
 import random
@@ -43,7 +44,7 @@ from spikefi.utils.layer import LayersInfo
 from spikefi.utils.progress import CampaignProgress, refresh_progress_job
 
 
-VERSION = '1.1.0'
+VERSION = version("spikefi")
 
 
 class CampaignOptimization(Enum):
