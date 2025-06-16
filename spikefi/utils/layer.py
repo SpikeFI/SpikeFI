@@ -16,6 +16,8 @@
 
 
 from collections.abc import Callable
+from math import prod
+import random
 from typing import Any
 
 from torch import nn, Tensor
@@ -99,8 +101,20 @@ class LayersInfo:
         idx = self.index(injectable_name)
         return self.order[idx + 1] if idx < len(self) - 1 else None
 
-    def get_shapes(self, syn_select: bool, name: str) -> tuple[int, ...]:
+    def get_random_inj(self) -> str:
+        return random.choices(self.get_injectables(), weights=self.get_sizes_inj(), k=1)[0]
+
+    def get_shape(self, syn_select: bool, name: str) -> tuple[int, ...]:
         return self.shapes_syn[name] if syn_select else self.shapes_neu[name]
+
+    def get_shapes_inj(self, syn_select: bool) -> list[tuple[int, ...]]:
+        return [self.get_shape(syn_select, inj) for inj in self.get_injectables()]
+
+    def get_size(self, syn_select: bool, name: str) -> int:
+        return prod(self.get_shape(syn_select, name))
+
+    def get_sizes_inj(self, syn_select: bool) -> list[int]:
+        return [prod(shape) for shape in self.get_shapes_inj(syn_select)]
 
     def is_injectable(self, name: str) -> bool:
         return self.injectables.get(name, False)

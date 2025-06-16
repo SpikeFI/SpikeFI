@@ -63,13 +63,11 @@ class CampaignProgress:
 
         with self._lock:
             if self.is_training:
-                e = self.epoch + 1 if self.epoch + 1 <= self.epoch_num else self.epoch_num
-
                 s_header = "|    Loss    |  Accuracy  |   Epoch #   " + s_header
                 s_border = re.sub(r'[^+\n]', '-', s_header.replace('|', '+'))
                 s = s_status + s_border + s_header
 
-                s += f"|  {self.loss:<7.3f}   |  {self.accu * 100.:6.3f} %  |  {e:4d}/{self.epoch_num:<4d}  "
+                s += f"|  {self.loss:7.3f}   |  {self.accu * 100.:6.3f} %  |  {self.epoch:4d}/{self.epoch_num:<4d}  "
             else:
                 s_border = re.sub(r'[^+\n]', '-', s_header.replace('|', '+'))
                 s = s_status + s_border + s_header

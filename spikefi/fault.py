@@ -18,7 +18,7 @@
 from collections.abc import Callable, Iterable
 from copy import copy, deepcopy
 from enum import auto, Flag
-from math import log2
+from math import log2, ceil
 from functools import reduce
 from operator import or_
 import random
@@ -125,11 +125,11 @@ class FaultModel:
         name = self.__class__.__name__
         return 'CustomFault' if name == FaultModel.__name__ else name
 
-    def get_name_snake_case(self, reverse: bool = True) -> str:
+    def get_name_snake_case(self, reverse: bool = True, delimiter: str = '_') -> str:
         words = re.findall(r'[A-Z][a-z]*', self.get_name())
         words = [word.lower() for word in words]
 
-        return '_'.join(reversed(words) if reverse else words)
+        return delimiter.join(reversed(words) if reverse else words)
 
     def is_neuronal(self) -> bool:
         return self.target in FaultTarget.neuronal()
@@ -242,12 +242,40 @@ class Fault:
         return len(self) > 1
 
     @staticmethod
-    def multiple_random(model: FaultModel, sites_num: int, layers: list[str] = None) -> 'Fault':
+    def merge(faults: list['Fault']) -> 'Fault':
+        assert bool(faults), 'Cannot merge empty list of faults'
+
+        is_ok = True
+        model = faults[0].model
+        fault = Fault(model)
+
+        for f in faults:
+            is_ok = is_ok and f.model == model
+            fault.update_sites(f.get_sites(include_pending=True))
+
+        assert is_ok, 'Only faults with the same fault model can be merged'
+
+        return fault
+
+    @staticmethod
+    def multiple_random_absolute(model: FaultModel, sites_num: int, layers: list[str] = None,
+                                 layer_sizes: list[int] = None) -> 'Fault':
         sites = []
         for _ in range(sites_num):
-            sites.append(FaultSite(random.choice(layers)) if layers else FaultSite())
+            ran_lay = random.choices(layers, weights=layer_sizes, k=1)[0]
+            sites.append(FaultSite(ran_lay) if layers else FaultSite())
 
         return Fault(model, sites)
+
+    @staticmethod
+    def multiple_random_percent(model: FaultModel, fault_density: float, layers: list[str] = None,
+                                layer_sizes: list[int] = None) -> 'Fault':
+        faults = []
+        for i, layer in enumerate(layers):
+            sites_num = ceil(layer_sizes[i] * fault_density)
+            faults.append(Fault.multiple_random_absolute(model, sites_num, [layer]))
+
+        return Fault.merge(faults)
 
     def refresh(self, discard_duplicates: bool = False) -> None:
         newly_defined = []
@@ -399,6 +427,7 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         return oround
 
 
+# Optimized Fault Round applies only in faults after training
 class OptimizedFaultRound(FaultRound):
     def __init__(self, round: FaultRound, layers_info: LayersInfo, late_start_en: bool = True, early_stop_en: bool = True) -> None:
         # Sort round's faults in ascending order of faults appearance (late-start layer first)

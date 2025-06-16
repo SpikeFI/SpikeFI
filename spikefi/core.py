@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from enum import Enum
 from glob import glob
-from itertools import product
+from itertools import cycle, product
 import pickle
 import random
 from threading import Thread
@@ -43,7 +43,7 @@ from spikefi.utils.layer import LayersInfo
 from spikefi.utils.progress import CampaignProgress, refresh_progress_job
 
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 
 class CampaignOptimization(Enum):
@@ -129,36 +129,44 @@ class Campaign:
         if not isinstance(faults, Iterable):
             raise TypeError(f"'{type(faults).__name__}' object is not iterable")
 
+        # Uniqueness of fault sites for multiple faults is guaranteed for all sites
+        # within the same fault object
         for f in faults:
             is_syn = f.model.is_synaptic()
+            l_count = {}
+            l_pos = {}
+            l_pos_iter = {}
 
-            while not f.is_complete():
-                s = next(iter(f.sites_pending))
+            for s in f.sites_pending:
+                if not s.layer:
+                    s.layer = self.layers_info.get_random_inj()
 
-                # Make sure that each random site of a multiple fault is unique
-                is_duplicate = True
-                while is_duplicate:
-                    lay = s.layer or random.choice(self.layers_info.get_injectables())
+                l_count.setdefault(s.layer, 0)
+                l_count[s.layer] += 1
 
-                    shape = self.layers_info.get_shapes(is_syn, lay)
-                    pos = list(s.position)
-                    if pos[0] is None:
-                        pos[0] = random.randrange(shape[0]) if is_syn else slice(None)
+            for lay, l_site_num in l_count.items():
+                ranges = [range(dim) for dim in self.layers_info.get_shape(is_syn, lay)]
+                all_comb = list(product(*ranges))
+                if not is_syn:
+                    all_comb = [(slice(None), *p) for p in all_comb]
 
-                    for i in range(1, 4):
-                        if pos[i] is None:
-                            si = i - (not is_syn)
-                            pos[i] = random.randrange(shape[si])
+                pos_excl = [p for p in [fs.position for fs in f.sites if fs.layer == lay]]
+                pos_comb = [p for p in all_comb if p not in pos_excl]
 
-                    s_new = ff.FaultSite(lay, tuple(pos))
-                    is_duplicate = f.has_site(s_new)
+                if l_site_num >= len(pos_comb):
+                    l_pos[lay] = pos_comb
+                else:
+                    l_pos[lay] = random.sample(pos_comb, l_site_num)
 
-                s.layer = lay
-                s.position = tuple(pos)
+                l_pos_iter[lay] = cycle(l_pos[lay])
 
-                f.refresh()
+            for s in f.sites_pending:
+                s.position = next(l_pos_iter[s.layer])
 
-        return faults
+            f.refresh(discard_duplicates=True)
+            assert f.is_complete()
+
+            return faults
 
     def validate(self, faults: Iterable[ff.Fault]) -> list[ff.Fault]:
         if not isinstance(faults, Iterable):
@@ -175,7 +183,7 @@ class Campaign:
             for s in f.sites:  # Validate only the defined fault sites
                 v = self.layers_info.is_injectable(s.layer)
                 if v:
-                    shape = self.layers_info.get_shapes(is_syn, s.layer)
+                    shape = self.layers_info.get_shape(is_syn, s.layer)
                     if is_syn:
                         v &= -shape[0] <= s.position[0] < shape[0]
 
@@ -218,7 +226,7 @@ class Campaign:
 
         inj_pos = []
         for lay_name in lay_names_inj:
-            lay_shape = self.layers_info.get_shapes(is_syn, lay_name)
+            lay_shape = self.layers_info.get_shape(is_syn, lay_name)
 
             K = range(lay_shape[0] if is_syn else 1)
             L = range(lay_shape[0 + is_syn])
@@ -419,7 +427,7 @@ class Campaign:
                     following_layer = getattr(self.faulty, self.layers_info.get_following(layer_name))
 
                     # Register neuron fault pre-hooks
-                    pre_hook = self._neuron_pre_hook_wrapper(layer_name)
+                    pre_hook = self._neuron_pre_hook_wrapper(layer_name, round.search_neuronal(layer_name))
                     self.handles[layer_name][ind_neu][0] = following_layer.register_forward_pre_hook(pre_hook)
 
                 # Parametric faults (subset of neuronal faults)
@@ -430,17 +438,17 @@ class Campaign:
 
                     if not self.handles[layer_name][ind_par][1]:
                         # Register parametric fault hooks
-                        hook = self._parametric_hook_wrapper(layer_name)
+                        hook = self._parametric_hook_wrapper(layer_name, round.search_parametric(layer_name))
                         self.handles[layer_name][ind_par][1] = layer.register_forward_hook(hook)
 
             # Synaptic faults
             if round.any_synaptic(layer_name) and not any(self.handles[layer_name][ind_syn]):
                 # Register synapse fault pre-hooks
-                pre_hook = self._synaptic_pre_hook_wrapper(layer_name)
+                pre_hook = self._synaptic_pre_hook_wrapper(layer_name, round.search_synaptic(layer_name))
                 self.handles[layer_name][ind_syn][0] = layer.register_forward_pre_hook(pre_hook)
 
                 # Register synapse fault hooks
-                hook = self._synaptic_hook_wrapper(layer_name)
+                hook = self._synaptic_hook_wrapper(layer_name, round.search_synaptic(layer_name))
                 self.handles[layer_name][ind_syn][1] = layer.register_forward_hook(hook)
 
     def _post_run(self, update_stats: bool = True):
@@ -464,14 +472,12 @@ class Campaign:
 
         # Register synaptic pre-hooks
         syn_handles = {}
-        syn_faults = self.rounds[self.r_idx].get_synaptic()
-        if syn_faults:
-            for site in [site for fault in syn_faults for site in fault.sites]:
-                if syn_handles.get(site.layer):
-                    continue
-                layer = getattr(faulty, site.layer)
-                pre_hook = self._synaptic_pre_hook_wrapper(site.layer, syn_faults)
-                syn_handles[site.layer] = layer.register_forward_pre_hook(pre_hook)
+        round = self.rounds[self.r_idx]
+        for layer_name in self.layers_info.get_injectables():
+            layer = getattr(faulty, layer_name)
+            if round.any_synaptic(layer_name):
+                pre_hook = self._synaptic_pre_hook_wrapper(layer_name, round.search_synaptic(layer_name))
+                syn_handles[layer_name] = layer.register_forward_pre_hook(pre_hook)
 
         for _ in range(epochs):
             self.progress.step_epoch()
@@ -497,11 +503,11 @@ class Campaign:
 
             # Keep the best network based on the max testing accuracy (needs to include the testing loop)
             # if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
-            #   self.save_faulty(faulty, "faulty_temp.pt")
+            #   self.save_net(faulty, "faulty_temp")
         # os.remove("faulty_temp.pt")
 
         # Final set of the faulty synapses & synaptic pre-hooks removal
-        if syn_faults:
+        if syn_handles:
             faulty.forward(input.to(self.device))
             for handle in syn_handles.values():
                 handle.remove()
@@ -510,7 +516,8 @@ class Campaign:
 
     def _evaluate_single(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
         is_out_faulty = self.orounds[self.r_idx].is_out_faulty
-        out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
+        out_name = self.layers_info.order[-1]
+        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
 
         for _, (_, input, target, label) in enumerate(test_loader):
             self.progress.step_batch()
@@ -529,7 +536,8 @@ class Campaign:
                 self._evaluate_single(test_loader, spike_loss)
 
     def _evaluate_O1(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
-        out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
+        out_name = self.layers_info.order[-1]
+        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
 
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
             self.progress.step_batch()
@@ -549,7 +557,8 @@ class Campaign:
                     self.progress.step()
 
     def _evaluate_optimized(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0) -> Tensor:
-        out_neuron_callable = self._neuron_pre_hook_wrapper(self.layers_info.order[-1])
+        out_name = self.layers_info.order[-1]
+        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
         N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
 
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
@@ -608,12 +617,12 @@ class Campaign:
     def save(self, fname: str = None) -> None:
         self.export().save(fname)
 
-    def save_faulty(self, net: nn.Module = None, fname: str = None) -> None:
-        faulty = net or self.faulty
-        if not faulty:
+    def save_net(self, net: nn.Module = None, fname: str = None) -> None:
+        to_save = net or self.faulty
+        if not to_save:
             return
 
-        torch.save(faulty, sfi_io.make_res_filepath((fname or self.name) + '.pt', rename=True))
+        torch.save(to_save.state_dict(), sfi_io.make_net_filepath((fname or self.name) + '.pt', rename=True))
 
     @staticmethod
     def load(fpath: str) -> 'Campaign':
@@ -696,9 +705,9 @@ class Campaign:
         return synaptic_pre_hook
 
     # Restore weights after layer's synapse faults evaluation
-    def _synaptic_hook_wrapper(self, layer_name: str) -> Callable[[nn.Module, tuple[Tensor, ...], Tensor], None]:
+    def _synaptic_hook_wrapper(self, layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...], Tensor], None]:
         def synaptic_hook(layer: nn.Module, _, __) -> None:
-            for fault in self.orounds[self.r_idx].search_synaptic(layer_name):
+            for fault in faults or self.orounds[self.r_idx].search_synaptic(layer_name):
                 for site in fault.sites:
                     with torch.no_grad():
                         layer.weight[site.unroll()] = fault.model.restore(site)
