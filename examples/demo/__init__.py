@@ -80,24 +80,24 @@ def get_net(fpath: str = None, trial: int = None) -> 'Network':
     return net
 
 
-def get_dataset(split: str) -> 'Dataset':
+def get_dataset(train: bool) -> 'Dataset':
     return Dataset(
         root_dir=os.path.join(WORK_DIR, net_params['training']['path']['root_dir']),
-        split=split,
+        split='Train' if train else 'Test',
         sampling_time=net_params['simulation']['Ts'],
         sample_length=net_params['simulation']['tSample'])
 
 
-def get_loader(split: str) -> DataLoader:
-    return DataLoader(dataset=get_dataset(split), batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
+def get_loader(train: bool) -> DataLoader:
+    return DataLoader(dataset=get_dataset(train), batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
 
 
 def get_single_loader() -> DataLoader:
-    return DataLoader(TensorDataset(*next(iter(get_loader('Test')))), batch_size=batch_size, shuffle=False)
+    return DataLoader(TensorDataset(*next(iter(get_loader(train=False)))), batch_size=batch_size, shuffle=False)
 
 
-def get_base_fname() -> str:
-    return f"{case_study}{'-do' if dropout_en else ''}"
+def get_base_fname(train: bool = False) -> str:
+    return f"{case_study}{'-do' if dropout_en else ''}{'_train' if train else ''}"
 
 
 def get_trial() -> int:
@@ -108,13 +108,13 @@ def get_trial_str(trial: int = None) -> str:
     return f" ({trial})" if trial else ""
 
 
-def get_fnetname(trial: int = None) -> str:
-    return f"{get_base_fname()}_net{get_trial_str(trial)}.pt"
+def get_fnetname(trial: int = None, format: str = 'pt') -> str:
+    return f"{get_base_fname()}_net{get_trial_str(trial)}.{format}"
 
 
-def get_fstaname(trial: int = None) -> str:
-    return f"{get_base_fname()}_stats{get_trial_str(trial)}.pkl"
+def get_fstaname(trial: int = None, format: str = 'pkl') -> str:
+    return f"{get_base_fname()}_stats{get_trial_str(trial)}.{format}"
 
 
-def get_ffigname(trial: int = None) -> str:
-    return f"{get_base_fname()}_train{get_trial_str(trial)}.svg"
+def get_ffigname(trial: int = None, format: str = 'svg') -> str:
+    return f"{get_base_fname()}_train{get_trial_str(trial)}.{format}"

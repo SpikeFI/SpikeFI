@@ -24,6 +24,7 @@
 
 from copy import copy
 import csv
+import numpy as np
 import os
 from torch.utils.data import DataLoader
 import slayerSNN as snn
@@ -53,8 +54,9 @@ demo.prepare(casestudy='nmnist-lenet', dropout=False)
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
 # Calculate total number of FI campaigns
-cmpns_total = len(layers) * len(s_batch) * len(n_faults) * len(opts) * len(es_tol)
 cmpns_count = 0
+cmpns_total = len(layers) * len(s_batch) * len(n_faults) * \
+              np.sum(np.where(np.array(opts) >= sfi.CampaignOptimization.O3.value, len(es_tol), 1))
 
 # For each targeted layer
 for lay_name in layers:
@@ -67,7 +69,7 @@ for lay_name in layers:
         # For each targeted batch size
         for bs in s_batch:
             # Create a dataset loader for the testing set with the targeted batch size
-            test_loader = DataLoader(dataset=demo.get_dataset('Test'), batch_size=bs, shuffle=demo.to_shuffle)
+            test_loader = DataLoader(dataset=demo.get_dataset(train=False), batch_size=bs, shuffle=demo.to_shuffle)
 
             # For each targeted optimization
             for o in opts:
@@ -92,8 +94,6 @@ for lay_name in layers:
                     k_actual = k - len(cmpn.rounds)  # Actual number of (new) faults to be injected
 
                     if k_actual > 0:
-                        shapes = cmpn.layers_info.shapes_syn if f_model.is_synaptic() else cmpn.layers_info.shapes_neu
-
                         if lay_name:
                             # Try to inject k faults
                             cmpn.inject_complete(f_model, [lay_name], fault_sampling_k=k_actual)

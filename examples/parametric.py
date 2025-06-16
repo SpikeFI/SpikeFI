@@ -48,7 +48,7 @@ demo.prepare(casestudy='nmnist-lenet', dropout=False)
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 # Create a dataset loader for the testing set
-test_loader = demo.get_loader('Test')
+test_loader = demo.get_loader(train=False)
 
 # Calculate total number of FI campaigns
 cmpns_total = len(params) * len(layers) * len(percent)
