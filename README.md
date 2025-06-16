@@ -173,8 +173,6 @@ A full example of the `setup_gesture.py` script is as follows:
 
 *SpikeFI* is delivered with a trained SNN model for each of the above datasets. The network architectures and dataset classes in PyTorch are located at `examples/demo/architectures` and the trained instances at `examples/demo/models`. The network configuration parameters, necessary for the SLAYER framework, can be found at `examples/demo/config`.
 
-<u>Attention:</u> Please note that the parameter `training.path.root_dir` inside each `.yaml` configuration file needs to agree with the `DEST_DIR` argument as it was set during the installation of the corresponding dataset. By default, this parameter is set to the default path of each dataset path. If another path is selected as destination or the dataset files are moved after installation, then the configuration files need to be updated.
-
 ### Examples
 
 The *examples* directory contains indicative cases of using *SpikeFI* in various scenarios, demonstrating how to use the framework's features and capabilities.
