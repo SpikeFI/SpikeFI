@@ -23,6 +23,7 @@ import matplotlib as mpl
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+import matplotlib.patheffects as path_effects
 import numpy as np
 import re
 import torch
@@ -140,8 +141,14 @@ def bar(cmpns_data: CampaignData | list[CampaignData],
 
             bottom += groups_cent[i]
 
-        ax.bar_label(b, labels=[fm.get_name()[:4] + "."], rotation=90,
-                     color='white', padding=-50)
+        bar_labels = ax.bar_label(b, labels=[fm.get_name()[:4] + "."], rotation=90,
+                                  color='white', padding=-35)
+
+        for bl in bar_labels:
+            bl.set_path_effects([
+                path_effects.Stroke(linewidth=1.25, foreground='gray'),
+                path_effects.Normal()
+            ])
 
         offset_mult[lay] += 1
 
