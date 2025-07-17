@@ -626,12 +626,12 @@ class Campaign:
         torch.save(to_save.state_dict(), sfi_io.make_net_filepath((fname or self.name) + '.pt', rename=True))
 
     @staticmethod
-    def load(fpath: str) -> 'Campaign':
-        return CampaignData.load(fpath).build()
+    def load(fpath: str, unpickler_type: type[pickle.Unpickler] = None) -> 'Campaign':
+        return CampaignData.load(fpath, unpickler_type).build()
 
     @staticmethod
-    def load_many(pathname: str) -> list['Campaign']:
-        return CampaignData.load_many(pathname).build()
+    def load_many(pathname: str, unpickler_type: type[pickle.Unpickler] = None) -> list['Campaign']:
+        return CampaignData.load_many(pathname, unpickler_type).build()
 
     @staticmethod
     def _forward_opt_wrapper(layers_info: LayersInfo, slayer: spikeLayer) -> Callable[[Tensor, Optional[int], Optional[int]], Tensor]:
@@ -763,15 +763,18 @@ class CampaignData:
             pickle.dump(self, pkl)
 
     @staticmethod
-    def load(fpath: str) -> 'CampaignData':
+    def load(fpath: str, unpickler_type: type[pickle.Unpickler] = None) -> 'CampaignData':
         with open(fpath, 'rb') as pkl:
-            return pickle.load(pkl)
+            if unpickler_type is None:
+                return pickle.load(pkl)
+            return unpickler_type(pkl).load()
 
     @staticmethod
-    def load_many(pathname: str) -> list['CampaignData']:
+    def load_many(pathname: str, unpickler_type: type[pickle.Unpickler] = None) -> list['CampaignData']:
         tore = []
         for f in glob(pathname):
             with open(f, 'rb') as pkl:
-                tore.append(pickle.load(pkl))
+                o = pickle.load(pkl) if unpickler_type is None else unpickler_type(pkl).load()
+                tore.append(o)
 
         return tore
