@@ -47,6 +47,7 @@ The following packages are required to be installed before proceeding with using
 - `pytorch` ≥ v2.1*
 - `matplotlib` ≥ v3.7
 - `numpy` ≥ v1.26*
+- `pyyaml` ≥ v6.0
 - `tqdm` ≥ v4.67
 - `cycler` ≥ v0.12
 - [`slayer`](https://github.com/bamsumit/slayerPytorch) ≥ v0.1
