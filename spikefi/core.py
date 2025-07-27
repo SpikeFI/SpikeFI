@@ -463,6 +463,11 @@ class Campaign:
             for stats in self.performance:
                 stats.update()
 
+        # Replace erroneous 'None' elements in statistics (slayer issue)
+        for stats in self.performance:
+            stats.training.accuracyLog = [x or 0. for x in stats.training.accuracyLog]
+            stats.testing.accuracyLog = [x or 0. for x in stats.testing.accuracyLog]
+
     def _evaluate_train(self, faulty: nn.Module, epochs: int, train_loader: DataLoader, optimizer: Optimizer, spike_loss: snn.loss) -> None:
         stat = self.performance[self.r_idx].training
 
@@ -720,12 +725,15 @@ class CampaignData:
     def __init__(self, version: str, campaign: Campaign) -> None:
         self.version = version
 
-        pbar = campaign.progress.pbar
-        campaign.progress.pbar = None
+        has_pbar = hasattr(campaign, 'progress')
+        if has_pbar:
+            pbar = campaign.progress.pbar
+            campaign.progress.pbar = None
 
         cmpn = deepcopy(campaign)
 
-        campaign.progress.pbar = pbar
+        if has_pbar:
+            campaign.progress.pbar = pbar
 
         self.name = cmpn.name
 
