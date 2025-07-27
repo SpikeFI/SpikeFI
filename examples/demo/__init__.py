@@ -92,8 +92,13 @@ def get_loader(train: bool) -> DataLoader:
     return DataLoader(dataset=get_dataset(train), batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
 
 
-def get_single_loader() -> DataLoader:
-    return DataLoader(TensorDataset(*next(iter(get_loader(train=False)))), batch_size=batch_size, shuffle=False)
+def get_tiny_loader(size: int = 1) -> DataLoader:
+    loader_iter = iter(get_loader(train=False))
+    batches = [next(loader_iter) for _ in range(size)]
+    fields = list(zip(*batches))
+    tensors = [torch.cat(field, dim=0) for field in fields]
+
+    return DataLoader(TensorDataset(*tensors), batch_size=batch_size, shuffle=False)
 
 
 def get_base_fname(train: bool = False) -> str:
