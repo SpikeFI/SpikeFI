@@ -14,7 +14,7 @@ import demo
 
 
 # Number of training epochs
-n_epochs = 2
+n_epochs = 20
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout
@@ -23,10 +23,6 @@ demo.prepare(casestudy='nmnist-lenet', dropout=False)
 # Create a network instance
 net = demo.Network(demo.net_params, demo.dropout_en).to(demo.device)
 trial = demo.get_trial()
-
-# Create the dataset loaders for the training and testing sets
-train_loader = demo.get_loader(train=True)
-test_loader = demo.get_loader(train=False)
 
 print("Training configuration:")
 print(f"  - case study: {demo.case_study}")
@@ -52,4 +48,4 @@ golden = cmpn.run_train(n_epochs, demo.get_loader(train=True), optimizer, spike_
 cmpn.save_net(golden, demo.get_fnetname(trial).split('.')[0])
 
 # Plot and save the learning curve(s)
-sfi.visual.learning_curve([cmpn.export()], format='png')
+sfi.visual.learning_curve(cmpn.export(), format='png')

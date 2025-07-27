@@ -22,7 +22,7 @@ from math import prod, sqrt
 import matplotlib as mpl
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, MaxNLocator
 import matplotlib.patheffects as path_effects
 import numpy as np
 import re
@@ -104,7 +104,7 @@ def _title(cmpns_data: list[CampaignData], data_map: dict,
 
 def bar(cmpns_data: CampaignData | list[CampaignData],
         model_friendly: str = None, fig_size: tuple[float, float] = None,
-        title_suffix: str = None, format: str = 'svg') -> Figure:
+        title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -157,13 +157,14 @@ def bar(cmpns_data: CampaignData | list[CampaignData],
     ax.set_xlabel('Layers')
     ax.set_xticks([i + (width/2 + space/2) * (offset_mult[lay]-1) for i, lay in enumerate(layers)], layers)
 
-    plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "bar", title_suffix, format))
-    plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+    if to_save:
+        plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "bar", title_suffix, format))
+        plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
-def colormap(format: str = 'svg') -> Figure:
+def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
     fig = plt.figure()
     fig.set_size_inches(fig.get_figwidth(), 1)
 
@@ -174,8 +175,9 @@ def colormap(format: str = 'svg') -> Figure:
     cbar.set_ticks(range(0, 100), minor=True)
     plt.xlabel("Classification Accuracy (%)")
 
-    plot_path = make_fig_filepath(fname="colormap." + format.removeprefix('.'))
-    plt.savefig(plot_path, transparent=True)
+    if to_save:
+        plot_path = make_fig_filepath(fname="colormap." + format.removeprefix('.'))
+        plt.savefig(plot_path, transparent=True)
 
     return fig
 
@@ -183,7 +185,7 @@ def colormap(format: str = 'svg') -> Figure:
 def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
          preserve_dim: bool = False, ratio: float = 1.0, max_area: int = 512**2, show_axes: bool = True,
          model_friendly: str = None, fig_size: tuple[float, float] = None,
-         title_suffix: str = None, format: str = 'svg') -> list[Figure]:
+         title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -253,8 +255,9 @@ def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault
             pos.axes.set_xticklabels([])
             pos.axes.set_yticklabels([])
 
-        plot_path = make_fig_filepath(_title(local_cmpns_data, {(lay, fm): cmpn_dict}, model_friendly, "heat", title_suffix, format))
-        plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+        if to_save:
+            plot_path = make_fig_filepath(_title(local_cmpns_data, {(lay, fm): cmpn_dict}, model_friendly, "heat", title_suffix, format))
+            plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
         figs.append(fig)
 
@@ -264,7 +267,7 @@ def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault
 def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer: str = None,
          legend_loc: str = "lower right",
          model_friendly: str = None, fig_size: tuple[float, float] = None,
-         title_suffix: str = None, format: str = 'svg') -> Figure:
+         title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -315,14 +318,15 @@ def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer:
 
     plt.legend(loc=legend_loc)
 
-    plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "scatter", title_suffix, format))
-    plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+    if to_save:
+        plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "scatter", title_suffix, format))
+        plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
 def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
-               title_suffix: str = None, format: str = 'svg') -> Figure:
+               title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -343,47 +347,52 @@ def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fi
     plt.ylabel("Mean classification accuracy (%)")
     plt.legend()
 
-    if title_suffix:
-        title_suffix = "_" + title_suffix.strip('_')
-    common_name = re.sub(r'(_net)\d+', r'\1', cmpns_data[0].name)
-    plot_path = make_fig_filepath(f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}")
-    plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+    if to_save:
+        if title_suffix:
+            title_suffix = "_" + title_suffix.strip('_')
+        common_name = re.sub(r'(_net)\d+', r'\1', cmpns_data[0].name)
+
+        plot_path = make_fig_filepath(f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}")
+        plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
 def learning_curve(cmpns_data: CampaignData | list[CampaignData], fig_size: tuple[float, float] = None,
-                   title_suffix: str = None, format: str = 'svg') -> list[Figure]:
+                   title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
     figs = list()
     for cmpn_data in cmpns_data:
+        n_rounds = len(cmpn_data.rounds)
+        fig = plt.figure(figsize=fig_size)
+
         for r, perf in enumerate(cmpn_data.performance):
             epochs = len(perf.training.accuracyLog)
-            fig = plt.figure(r, figsize=fig_size)
 
-            plt.plot(range(1, epochs + 1), torch.Tensor(perf.training.accuracyLog) * 100., 'b--', label='Training')
+            plt.plot(range(1, epochs + 1), torch.Tensor(perf.training.accuracyLog) * 100.,
+                     label='Training' + (f' (round {r})' if n_rounds > 1 else ''))
             if all(accu for accu in perf.testing.accuracyLog):
-                plt.plot(range(1, epochs + 1), torch.Tensor(perf.testing.accuracyLog) * 100., 'g-', label='Testing')
+                plt.plot(range(1, epochs + 1), torch.Tensor(perf.testing.accuracyLog) * 100.,
+                         label='Testing' + (f' (round {r})' if n_rounds > 1 else ''))
 
-            plt.grid(visible=True, which='both', axis='both')
-            plt.legend(loc='lower right')
-
-            plt.xlabel('Epoch #')
+            plt.legend()
+            plt.xlabel('Epoch')
             plt.ylabel("Accuracy (%)")
-            plt.xticks(ticks=[1] + list(range(10, epochs + 1, 10)))
-            plt.xticks(ticks=range(2, epochs + 1, 2), minor=True)
-            plt.yticks(ticks=range(0, 101, 10))
-            plt.yticks(ticks=range(0, 100, 2), minor=True)
             plt.xlim((1, epochs))
             plt.ylim((0., 100.))
 
-            if title_suffix:
-                title_suffix = "_" + title_suffix.strip('_')
-            plot_path = make_fig_filepath(f"{cmpn_data.name}_learning{title_suffix or ''}.{format.strip('.')}")
-            plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+            ax = plt.gca()
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-            figs.append(fig)
+            if to_save:
+                if title_suffix:
+                    title_suffix = "_" + title_suffix.strip('_')
+
+                plot_path = make_fig_filepath(f"{cmpn_data.name}_learning{title_suffix or ''}.{format.strip('.')}")
+                plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+
+        figs.append(fig)
 
     return figs

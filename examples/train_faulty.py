@@ -82,4 +82,4 @@ for faulty in faulties:
 cmpn.save()
 
 # Plot and save the learning curve(s)
-sfi.visual.learning_curve([cmpn.export()], format='png')
+figs = sfi.visual.learning_curve(cmpn.export(), format='png')
