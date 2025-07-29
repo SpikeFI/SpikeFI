@@ -78,7 +78,7 @@ for param in params:
             cmpn.run(test_loader, spike_loss=snn.loss(demo.net_params).to(cmpn.device))
 
             # Print the duration of the FI campaign in seconds
-            print(f"Duration: {cmpn.duration : .2f} secs")
+            print(f"Duration: {cmpn.duration: .2f} secs")
 
             # Keep the campaign data aside to use later in the combinatorial plot
             cmpns_data.append(cmpn.export())

@@ -24,6 +24,7 @@ import os
 import torch
 import slayerSNN as snn
 import spikefi as sfi
+from spikefi.utils.quantization import quant_args_from_range
 import demo
 
 
@@ -55,6 +56,7 @@ for lay_name in layers:
     layer = getattr(net, lay_name)
     wmin = layer.weight.min().item()
     wmax = layer.weight.max().item()
+    scale, zero_point, _ = quant_args_from_range(wmin, wmax, qdtype)
 
     # For each targeted bit position
     for b in bits:
@@ -65,7 +67,7 @@ for lay_name in layers:
 
         # Inject bitflipped synapse faults across 250^2 randomly selected synaptic weights in the layer
         # Creates a separate fault round containing a single fault each
-        cmpn.inject_complete(sfi.fm.BitflippedSynapse(b, wmin, wmax, qdtype),
+        cmpn.inject_complete(sfi.fm.BitflippedSynapse(b, scale, zero_point, qdtype),
                              [lay_name], fault_sampling_k=250**2)
 
         # Print status information

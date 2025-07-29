@@ -25,7 +25,6 @@ from torch import Tensor
 from slayerSNN.slayer import spikeLayer
 
 from spikefi.fault import FaultModel, FaultSite, FaultTarget
-import spikefi.utils.quantization as qua
 
 
 # Fault Model Functions
@@ -149,5 +148,5 @@ class PerturbedSynapse(FaultModel):
 
 
 class BitflippedSynapse(FaultModel):
-    def __init__(self, bit: int, wmin: float, wmax: float, quant_dtype: torch.dtype) -> None:
-        super().__init__(FaultTarget.WEIGHT, bfl_value, bit, *qua.quant_args_from_range(wmin, wmax, quant_dtype))
+    def __init__(self, bit: int, scale: float, zero_point: int, dtype: torch.dtype):
+        super().__init__(FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype)
