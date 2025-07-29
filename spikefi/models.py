@@ -119,8 +119,9 @@ class SaturatedNeuron(FaultModel):
 
 
 class ParametricNeuron(ParametricFaultModel):
-    def __init__(self, param_name: str, percentage: float) -> None:
-        super().__init__(param_name, mul_value, percentage)
+    def __init__(self, param_name: str, percentage: float = None) -> None:
+        rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
+        super().__init__(param_name, mul_value, rho)
 
 
 # Synapse fault models
@@ -130,13 +131,13 @@ class DeadSynapse(FaultModel):
 
 
 class SaturatedSynapse(FaultModel):
-    def __init__(self, satu: float) -> None:
+    def __init__(self, satu: float = 10.0) -> None:
         super().__init__(FaultTarget.WEIGHT, set_value, satu)
 
 
 class PerturbedSynapse(FaultModel):
-    def __init__(self, alpha: float):
-        rho = random.uniform(-alpha, alpha)
+    def __init__(self, percentage: float = None):
+        rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
         super().__init__(FaultTarget.WEIGHT, mul_value, rho)
 
 
