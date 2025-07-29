@@ -118,6 +118,13 @@ class SaturatedNeuron(FaultModel):
         super().__init__(FaultTarget.OUTPUT, set_value, 1.)
 
 
+class StuckNeuron(FaultModel):
+    def __init__(self, x: float = None):
+        _x = x if x is not None else random.uniform(0, 1)
+        assert _x >= 0.0 and _x <= 1.0, 'Stuck-at value x needs to be in the range [0, 1]'
+        super().__init__(FaultTarget.OUTPUT, set_value, _x)
+
+
 class ParametricNeuron(ParametricFaultModel):
     def __init__(self, param_name: str, percentage: float = None) -> None:
         rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
