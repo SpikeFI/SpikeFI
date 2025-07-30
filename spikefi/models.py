@@ -17,7 +17,9 @@
 
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass, field
 import random
+from typing import Any, Optional
 
 import torch
 from torch import Tensor
@@ -106,6 +108,45 @@ class ParametricFaultModel(FaultModel):
         return super().perturb(original, site, self.args[0].pop(site))
 
 
+@dataclass
+class RandomModelChoice:
+    model_cls: type
+    args_factory: Callable[[], tuple[Any, ...]] = field(default=lambda: ())
+    select_chance: Optional[float] = None
+
+
+class RandomFaultModel:
+    def __new__(cls, model_choices: Optional[list[RandomModelChoice]]) -> FaultModel:
+        total_weight = 0.0
+        none_count = 0
+        for c in model_choices:
+            if c.select_chance is not None:
+                total_weight += c.select_chance
+            else:
+                none_count += 1
+
+        if total_weight > 1.0:
+            none_count = len(model_choices)
+            total_weight = 0.0
+
+        # Distribute remaining weight equally among None weights
+        remaining_weight = 1.0 - total_weight
+        inferred_weight = remaining_weight / none_count if none_count > 0 else 0.0
+
+        weights = [
+            c.select_chance if c.select_chance is not None else inferred_weight
+            for c in model_choices
+        ]
+
+        # Normalize weights to sum 1
+        weight_sum = sum(weights)
+        weights = [w / weight_sum for w in weights]
+
+        chosen = random.choices(model_choices, weights=weights, k=1)[0]
+
+        return chosen.model_cls(*chosen.args_factory())
+
+
 # Neuron fault models
 class DeadNeuron(FaultModel):
     def __init__(self) -> None:
@@ -124,10 +165,30 @@ class StuckNeuron(FaultModel):
         super().__init__(FaultTarget.OUTPUT, set_value, _x)
 
 
+class RandomNeuron(RandomFaultModel):
+    DEF_MODEL_CHOICES = [
+        RandomModelChoice(DeadNeuron, select_chance=2/3),
+        RandomModelChoice(SaturatedNeuron, select_chance=1/6),
+        RandomModelChoice(StuckNeuron, select_chance=1/6)
+    ]
+
+    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
+        return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
+
+
 class ParametricNeuron(ParametricFaultModel):
     def __init__(self, param_name: str, percentage: float = None) -> None:
         rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
         super().__init__(param_name, mul_value, rho)
+
+
+class RandomParametricNeuron(RandomFaultModel):
+    DEF_MODEL_CHOICES = [
+        RandomModelChoice(ParametricNeuron, lambda: (random.choice(['theta', 'tauSr', 'tauRef']), None))
+    ]
+
+    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> ParametricFaultModel:
+        return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 
 # Synapse fault models
@@ -137,8 +198,9 @@ class DeadSynapse(FaultModel):
 
 
 class SaturatedSynapse(FaultModel):
-    def __init__(self, satu: float = 10.0) -> None:
-        super().__init__(FaultTarget.WEIGHT, set_value, satu)
+    def __init__(self, satu: float = None) -> None:
+        _satu = satu if satu is not None else random.choice([-1, 1]) * 10.0
+        super().__init__(FaultTarget.WEIGHT, set_value, _satu)
 
 
 class PerturbedSynapse(FaultModel):
@@ -150,3 +212,14 @@ class PerturbedSynapse(FaultModel):
 class BitflippedSynapse(FaultModel):
     def __init__(self, bit: int, scale: float, zero_point: int, dtype: torch.dtype):
         super().__init__(FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype)
+
+
+class RandomSynapse(RandomFaultModel):
+    DEF_MODEL_CHOICES = [
+        RandomModelChoice(DeadSynapse, select_chance=0.7),
+        RandomModelChoice(SaturatedSynapse, select_chance=0.1),
+        RandomModelChoice(PerturbedSynapse, select_chance=0.2)
+    ]
+
+    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
+        return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
