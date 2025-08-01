@@ -19,7 +19,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 import random
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import torch
 from torch import Tensor
@@ -198,9 +198,30 @@ class DeadSynapse(FaultModel):
 
 
 class SaturatedSynapse(FaultModel):
-    def __init__(self, satu: float = None) -> None:
-        _satu = satu if satu is not None else random.choice([-1, 1]) * 10.0
-        super().__init__(FaultTarget.WEIGHT, set_value, _satu)
+    def __init__(self, Q1: float | Tensor, Q3: float | Tensor,
+                 tail: Literal['upper', 'lower'] = 'lower',
+                 intensity: Literal['mild', 'extreme'] = 'mild') -> None:
+        # Q1 = torch.quantile(weight_matrix, 0.25)
+        # Q3 = torch.quantile(weight_matrix, 0.75)
+        Q1 = torch.as_tensor(Q1, dtype=torch.float32)
+        Q3 = torch.as_tensor(Q3, dtype=torch.float32)
+
+        IQR = Q3 - Q1
+        i = 3.0 if intensity == 'extreme' else 1.5
+
+        if tail == 'upper':
+            U = Q3 + i * IQR
+            satu = U.ceil() + 1
+        else:
+            L = Q1 - i * IQR
+            satu = L.floor() - 1
+
+        super().__init__(FaultTarget.WEIGHT, set_value, satu)
+
+
+class StuckSynapse(FaultModel):
+    def __init__(self, x: float):
+        super().__init__(FaultTarget.WEIGHT, set_value, x)
 
 
 class PerturbedSynapse(FaultModel):
@@ -216,9 +237,8 @@ class BitflippedSynapse(FaultModel):
 
 class RandomSynapse(RandomFaultModel):
     DEF_MODEL_CHOICES = [
-        RandomModelChoice(DeadSynapse, select_chance=0.7),
-        RandomModelChoice(SaturatedSynapse, select_chance=0.1),
-        RandomModelChoice(PerturbedSynapse, select_chance=0.2)
+        RandomModelChoice(DeadSynapse, select_chance=2/3),
+        RandomModelChoice(PerturbedSynapse, select_chance=1/3)
     ]
 
     def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
