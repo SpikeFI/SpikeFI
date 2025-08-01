@@ -24,7 +24,7 @@ import os
 import torch
 import slayerSNN as snn
 import spikefi as sfi
-from spikefi.utils.quantization import quant_args_from_range
+from spikefi.utils.quantization import qargs_from_tensor
 import demo
 
 
@@ -51,12 +51,9 @@ cmpns_count = 0
 
 # For each targeted layer
 for lay_name in layers:
-    # Find min and max synaptic weights of the layer to use for
-    # the quantization of the layer's synaptic weights
-    layer = getattr(net, lay_name)
-    wmin = layer.weight.min().item()
-    wmax = layer.weight.max().item()
-    scale, zero_point, _ = quant_args_from_range(wmin, wmax, qdtype)
+    # Find scale and zero point for the quantization of the synaptic weights of the layer
+    W = getattr(net, lay_name).weight
+    scale, zero_point, _ = qargs_from_tensor(W, qdtype)
 
     # For each targeted bit position
     for b in bits:

@@ -33,34 +33,34 @@ def q2i_dtype(qdtype: torch.dtype) -> torch.dtype:
     return idtype
 
 
-def quant_args_from_range(xmin: float | Tensor, xmax: float | Tensor,
-                          dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
+def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
+    return qargs_from_range(x.min(), x.max(), dtype)
+
+
+def qargs_from_range(xmin: float | Tensor, xmax: float | Tensor,
+                     dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
     dt_info = torch.iinfo(dtype)
     qmin = dt_info.min
     qmax = dt_info.max
 
-    scale, zero_point = quantize_exact(xmin, xmax, qmin, qmax)
+    scale, zero_point = qargs_exact(xmin, xmax, qmin, qmax)
 
     return scale, zero_point, dtype
 
 
-def quantize_exact(xmin: float | Tensor, xmax: float | Tensor,
-                   qmin: int, qmax: int) -> tuple[Tensor, Tensor]:
-    if not torch.is_tensor(xmin):
-        xmin = torch.tensor(xmin)
-    if not torch.is_tensor(xmax):
-        xmax = torch.tensor(xmax)
-    xmin = xmin.float()
-    xmax = xmax.float()
+def qargs_exact(xmin: float | Tensor, xmax: float | Tensor,
+                qmin: int, qmax: int) -> tuple[Tensor, Tensor]:
+    xmin = torch.as_tensor(xmin, dtype=torch.float32)
+    xmax = torch.as_tensor(xmax, dtype=torch.float32)
 
-    assert xmin.size() == xmax.size()
+    assert xmin.shape == xmax.shape, 'Tensors shape mismatch'
 
-    scale = ((xmax - xmin) / (qmax - qmin))
+    scale = (xmax - xmin) / (qmax - qmin)
     zero_point = torch.clip(qmin - xmin / scale, qmin, qmax).int()
 
     return scale, zero_point
 
 
-def quantize_precision(xmin: float | Tensor, xmax: float | Tensor,
-                       p: int) -> tuple[Tensor, Tensor]:
-    return quantize_exact(xmin, xmax, 0, 2**p-1)
+def qargs_precision(xmin: float | Tensor, xmax: float | Tensor,
+                    p: int) -> tuple[Tensor, Tensor]:
+    return qargs_exact(xmin, xmax, 0, 2**p-1)

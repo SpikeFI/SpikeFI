@@ -23,7 +23,7 @@ import spikefi as sfi
 from spikefi.models import DeadNeuron, ParametricNeuron, SaturatedSynapse, BitflippedSynapse
 from spikefi.fault import FaultSite, Fault
 from spikefi.core import Campaign
-from spikefi.utils.quantization import quant_args_from_range
+from spikefi.utils.quantization import qargs_from_tensor
 import demo
 
 
@@ -69,16 +69,14 @@ cmpn.save()
 # Reset the campaign, i.e., remove all faults and fault rounds
 cmpn.eject()
 
-# Find min and max synaptic weights of layer 'SF2' to use for
-# the quantization of the layer's synaptic weights
-layer = getattr(net, 'SF2')
-wmin = layer.weight.min().item()
-wmax = layer.weight.max().item()
-scale, zero_point, dtype = quant_args_from_range(wmin, wmax, torch.uint8)
+# Find scale and zero point for the quantization of the synaptic weights
+# of layer 'SF2'
+W = getattr(net, 'SF2').weight
+scale, zero_point, qdtype = qargs_from_tensor(W, torch.uint8)
 
 # Create fault model 'fm' to be a Bitflipped Synapse with 8-bit quantized
 # integer synaptic weights, targeting the bit 7 (MSB) to be flipped
-fm = BitflippedSynapse(7, scale, zero_point, dtype)
+fm = BitflippedSynapse(7, scale, zero_point, qdtype)
 # Inject a bit-flipped synapse fault to every synapse of layer 'SF2', one at a time
 cmpn.inject_complete(fm, ['SF2'])
 
