@@ -20,7 +20,7 @@
 import os
 import torch
 import spikefi as sfi
-from spikefi.models import DeadNeuron, ParametricNeuron, SaturatedSynapse, BitflippedSynapse
+from spikefi.models import DeadNeuron, SaturatedSynapse, ThresholdFaultNeuron, BitflippedSynapse
 from spikefi.fault import FaultSite, Fault
 from spikefi.core import Campaign
 from spikefi.utils.quantization import qargs_from_tensor
@@ -47,9 +47,9 @@ fx = Fault(DeadNeuron(), FaultSite('SF2'))
 # Fault 'fy' is a Saturated Synapse fault to randomly target a synapse
 # between layers SF1 and its predecessor and set the synaptic weight to 10
 fy = Fault(SaturatedSynapse(10), FaultSite('SF1'))
-# Fault 'fz' is a multiple (4) neuron parametric fault targeting the threshold parameter theta
-# and setting it to half its nominal value in 4 neurons randomly selected across the entire network
-fz = Fault(ParametricNeuron('theta', 0.5), [FaultSite(), FaultSite(), FaultSite(), FaultSite()])
+# Fault 'fz' is a multiple (4) neuron parametric threshold fault, setting the threshold
+# to half its nominal value in 4 neurons randomly selected across the entire network
+fz = Fault(ThresholdFaultNeuron(0.5), [FaultSite() for _ in range(4)])
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject([fx])

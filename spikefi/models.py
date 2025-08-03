@@ -60,7 +60,7 @@ def bfl_value(original: float | Tensor, bit: int, scale: float | Tensor, zero_po
 
 
 # Mother class for parametric faults
-class ParametricFaultModel(FaultModel):
+class ParametricNeuronFaultModel(FaultModel):
     def __init__(self, param_name: str, param_method: Callable[..., float | Tensor], *param_args) -> None:
         super().__init__(FaultTarget.PARAMETER, set_value, dict())
         self.method.__name__ = 'set_value'
@@ -176,10 +176,25 @@ class RandomNeuron(RandomFaultModel):
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 
-class ParametricNeuron(ParametricFaultModel):
+class ParametricNeuron(ParametricNeuronFaultModel):
     def __init__(self, param_name: str, percentage: float = None) -> None:
         rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
         super().__init__(param_name, mul_value, rho)
+
+
+class IntegrationFaultNeuron(ParametricNeuron):
+    def __init__(self, percentage: float = None) -> None:
+        super().__init__('tauSr', percentage)
+
+
+class RefractoryFaultNeuron(ParametricNeuron):
+    def __init__(self, percentage: float = None) -> None:
+        super().__init__('tauRef', percentage)
+
+
+class ThresholdFaultNeuron(ParametricNeuron):
+    def __init__(self, percentage: float = None) -> None:
+        super().__init__('theta', percentage)
 
 
 class RandomParametricNeuron(RandomFaultModel):
@@ -187,7 +202,7 @@ class RandomParametricNeuron(RandomFaultModel):
         RandomModelChoice(ParametricNeuron, lambda: (random.choice(['theta', 'tauSr', 'tauRef']), None))
     ]
 
-    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> ParametricFaultModel:
+    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> ParametricNeuronFaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 

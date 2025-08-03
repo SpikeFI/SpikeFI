@@ -143,7 +143,7 @@ class FaultModel:
     def is_perturbed(self, site: FaultSite) -> bool:
         return site is not None and site in self.original and site in self.perturbed
 
-    # The second argument is needed in order to be in accordance with the perturb method of ParametricFaultModel
+    # The second argument is needed in order to be in accordance with the perturb method of ParametricNeuronFaultModel
     def perturb(self, original: float | Tensor, _: FaultSite, *new_args) -> float | Tensor:
         return self.method(original, *(new_args or self.args))
 
