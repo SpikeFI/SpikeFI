@@ -72,7 +72,7 @@ cmpn.eject()
 # Find scale and zero point for the quantization of the synaptic weights
 # of layer 'SF2'
 W = getattr(net, 'SF2').weight
-scale, zero_point, qdtype = qargs_from_tensor(W, torch.uint8)
+scale, zero_point, qdtype = qargs_from_tensor(W, torch.quint8)
 
 # Create fault model 'fm' to be a Bitflipped Synapse with 8-bit quantized
 # integer synaptic weights, targeting the bit 7 (MSB) to be flipped

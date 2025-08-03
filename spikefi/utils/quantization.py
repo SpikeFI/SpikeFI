@@ -19,33 +19,17 @@ import torch
 from torch import Tensor
 
 
-def q2i_dtype(qdtype: torch.dtype) -> torch.dtype:
-    if qdtype is torch.quint8:
-        idtype = torch.uint8
-    elif qdtype is torch.qint8:
-        idtype = torch.int8
-    elif qdtype is torch.qint32:
-        idtype = torch.int32
-    else:
-        raise AssertionError('The desired data type of returned tensor has to be'
-                             'one of the quantized dtypes: torch.quint8, torch.qint8, torch.qint32')
+def qiinfo(dtype: torch.dtype) -> torch.iinfo:
+    if dtype is torch.quint8:
+        return torch.iinfo(torch.uint8)
 
-    return idtype
+    if dtype is torch.qint8:
+        return torch.iinfo(torch.int8)
 
+    if dtype is torch.qint32:
+        return torch.iinfo(torch.int32)
 
-def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
-    return qargs_from_range(x.min(), x.max(), dtype)
-
-
-def qargs_from_range(xmin: float | Tensor, xmax: float | Tensor,
-                     dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
-    dt_info = torch.iinfo(dtype)
-    qmin = dt_info.min
-    qmax = dt_info.max
-
-    scale, zero_point = qargs_exact(xmin, xmax, qmin, qmax)
-
-    return scale, zero_point, dtype
+    return torch.iinfo(dtype)
 
 
 def qargs_exact(xmin: float | Tensor, xmax: float | Tensor,
@@ -58,7 +42,22 @@ def qargs_exact(xmin: float | Tensor, xmax: float | Tensor,
     scale = (xmax - xmin) / (qmax - qmin)
     zero_point = torch.clip(qmin - xmin / scale, qmin, qmax).int()
 
-    return scale, zero_point
+    return scale.detach(), zero_point.detach()
+
+
+def qargs_from_range(xmin: float | Tensor, xmax: float | Tensor,
+                     dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
+    dt_info = qiinfo(dtype)
+    qmin = dt_info.min
+    qmax = dt_info.max
+
+    scale, zero_point = qargs_exact(xmin, xmax, qmin, qmax)
+
+    return scale, zero_point, dtype
+
+
+def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
+    return qargs_from_range(x.min(), x.max(), dtype)
 
 
 def qargs_precision(xmin: float | Tensor, xmax: float | Tensor,

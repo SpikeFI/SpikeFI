@@ -34,7 +34,7 @@ layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select the bit positions to target
 bits = range(8)     # LSB is bit 0
 # Select the precision of the quantized integer synaptic weights
-qdtype = torch.uint8
+qdtype = torch.quint8
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout

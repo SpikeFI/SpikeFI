@@ -27,6 +27,7 @@ from torch import Tensor
 from slayerSNN.slayer import spikeLayer
 
 from spikefi.fault import FaultModel, FaultSite, FaultTarget
+from spikefi.utils.quantization import qiinfo
 
 
 # Fault Model Functions
@@ -43,20 +44,29 @@ def mul_value(original: float | Tensor, value: float | Tensor) -> float | Tensor
 
 
 def qua_value(original: float | Tensor, scale: float | Tensor, zero_point: int | Tensor, dtype: torch.dtype) -> Tensor:
-    return torch.dequantize(torch.quantize_per_tensor(original, scale, zero_point, dtype))
+    Q = torch.quantize_per_tensor(torch.as_tensor(original), scale, zero_point, dtype)
+    return torch.dequantize(Q)
 
 
 # LSB: bit 0
 # MSB: bit N-1
+# Works with torch.quint8, torch.qint8, torch.qint32
 def bfl_value(original: float | Tensor, bit: int, scale: float | Tensor, zero_point: int | Tensor, dtype: torch.dtype) -> Tensor:
-    idt_info = torch.iinfo(dtype)
-    assert bit >= 0 and bit < idt_info.bits, 'Invalid bit position to flip'
+    assert bit >= 0 and bit < qiinfo(dtype).bits, 'Invalid bit position to flip'
 
-    # q = torch.quantize_per_tensor(original, scale, zero_point, qdtype).int_repr()
-    # return torch.dequantize(q ^ 2 ** bit)
+    # q = torch.round(original / scale + zero_point).type(dtype) ^ (2 ** bit)
+    # d = scale * (q - zero_point)
 
-    q = torch.round(original / scale + zero_point).type(dtype) ^ (2 ** bit)
-    return scale * (q - zero_point)
+    scale = scale.item() if isinstance(scale, Tensor) else scale
+    zero_point = zero_point.item() if isinstance(zero_point, Tensor) else zero_point
+
+    q = torch.quantize_per_tensor(original, scale, zero_point, dtype)
+    qi = q.int_repr()
+    qif = qi ^ (1 << bit)
+    qifq = torch._make_per_tensor_quantized_tensor(qif, scale, zero_point)
+    d = torch.dequantize(qifq)
+
+    return d
 
 
 # Mother class for parametric faults
