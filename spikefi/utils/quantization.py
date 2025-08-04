@@ -15,6 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
+from numpy import clip
 import torch
 from torch import Tensor
 
@@ -32,34 +33,28 @@ def qiinfo(dtype: torch.dtype) -> torch.iinfo:
     return torch.iinfo(dtype)
 
 
-def qargs_exact(xmin: float | Tensor, xmax: float | Tensor,
-                qmin: int, qmax: int) -> tuple[Tensor, Tensor]:
-    xmin = torch.as_tensor(xmin, dtype=torch.float32)
-    xmax = torch.as_tensor(xmax, dtype=torch.float32)
-
-    assert xmin.shape == xmax.shape, 'Tensors shape mismatch'
+def qargs_exact(xmin: float, xmax: float, qmin: int, qmax: int) -> tuple[float, int]:
+    assert xmin != xmax, "Min and max values cannot be equal"
 
     scale = (xmax - xmin) / (qmax - qmin)
-    zero_point = torch.clip(qmin - xmin / scale, qmin, qmax).int()
+    zero_point = int(clip(qmin - xmin / scale, qmin, qmax))
 
-    return scale.detach(), zero_point.detach()
+    return scale, zero_point
 
 
-def qargs_from_range(xmin: float | Tensor, xmax: float | Tensor,
-                     dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
-    dt_info = qiinfo(dtype)
-    qmin = dt_info.min
-    qmax = dt_info.max
+def qargs_precision(xmin: float, xmax: float, p: int) -> tuple[float, int]:
+    return qargs_exact(xmin, xmax, 0, 2**p-1)
+
+
+def qargs_from_range(xmin: float, xmax: float, dtype: torch.dtype) -> tuple[float, int]:
+    info = qiinfo(dtype)
+    qmin = info.min
+    qmax = info.max
 
     scale, zero_point = qargs_exact(xmin, xmax, qmin, qmax)
 
-    return scale, zero_point, dtype
+    return scale, zero_point
 
 
-def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor, torch.dtype]:
-    return qargs_from_range(x.min(), x.max(), dtype)
-
-
-def qargs_precision(xmin: float | Tensor, xmax: float | Tensor,
-                    p: int) -> tuple[Tensor, Tensor]:
-    return qargs_exact(xmin, xmax, 0, 2**p-1)
+def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[float, int]:
+    return qargs_from_range(x.min().item(), x.max().item(), dtype)

@@ -19,7 +19,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 import random
-from typing import Any, Literal, Optional
+from typing import Any, Iterable, Literal, Optional
 
 import torch
 from torch import Tensor
@@ -43,30 +43,29 @@ def mul_value(original: float | Tensor, value: float | Tensor) -> float | Tensor
     return original * value
 
 
-def qua_value(original: float | Tensor, scale: float | Tensor, zero_point: int | Tensor, dtype: torch.dtype) -> Tensor:
-    Q = torch.quantize_per_tensor(torch.as_tensor(original), scale, zero_point, dtype)
-    return torch.dequantize(Q)
+def qua_value(original: Tensor, scale: float, zero_point: int, dtype: torch.dtype) -> Tensor:
+    return torch.dequantize(torch.quantize_per_tensor(original, scale, zero_point, dtype))
 
 
 # LSB: bit 0
 # MSB: bit N-1
 # Works with torch.quint8, torch.qint8, torch.qint32
-def bfl_value(original: float | Tensor, bit: int, scale: float | Tensor, zero_point: int | Tensor, dtype: torch.dtype) -> Tensor:
-    assert bit >= 0 and bit < qiinfo(dtype).bits, 'Invalid bit position to flip'
+def bfl_value(original: Tensor, bit: int | Iterable[int] | Tensor,
+              scale: float, zero_point: int, dtype: torch.dtype) -> Tensor:
+    if isinstance(bit, int):
+        bit = [bit]
+    assert all(0 <= b < qiinfo(dtype).bits for b in bit), 'Invalid bit position(s) to flip'
 
-    # q = torch.round(original / scale + zero_point).type(dtype) ^ (2 ** bit)
-    # d = scale * (q - zero_point)
-
-    scale = scale.item() if isinstance(scale, Tensor) else scale
-    zero_point = zero_point.item() if isinstance(zero_point, Tensor) else zero_point
+    bfl_mask = 0
+    for b in bit:
+        bfl_mask |= (1 << b)
 
     q = torch.quantize_per_tensor(original, scale, zero_point, dtype)
     qi = q.int_repr()
-    qif = qi ^ (1 << bit)
+    qif = qi ^ bfl_mask
     qifq = torch._make_per_tensor_quantized_tensor(qif, scale, zero_point)
-    d = torch.dequantize(qifq)
 
-    return d
+    return torch.dequantize(qifq)
 
 
 # Mother class for parametric faults
@@ -126,7 +125,7 @@ class RandomModelChoice:
 
 
 class RandomFaultModel:
-    def __new__(cls, model_choices: Optional[list[RandomModelChoice]]) -> FaultModel:
+    def __new__(cls, model_choices: list[RandomModelChoice]) -> FaultModel:
         total_weight = 0.0
         none_count = 0
         for c in model_choices:
@@ -256,7 +255,7 @@ class PerturbedSynapse(FaultModel):
 
 
 class BitflippedSynapse(FaultModel):
-    def __init__(self, bit: int, scale: float, zero_point: int, dtype: torch.dtype):
+    def __init__(self, bit: int | Iterable[int], scale: float, zero_point: int, dtype: torch.dtype):
         super().__init__(FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype)
 
 

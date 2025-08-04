@@ -20,7 +20,7 @@
 import os
 import torch
 import spikefi as sfi
-from spikefi.models import DeadNeuron, SaturatedSynapse, ThresholdFaultNeuron, BitflippedSynapse
+from spikefi.models import DeadNeuron, StuckSynapse, ThresholdFaultNeuron, BitflippedSynapse
 from spikefi.fault import FaultSite, Fault
 from spikefi.core import Campaign
 from spikefi.utils.quantization import qargs_from_tensor
@@ -44,9 +44,9 @@ cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 # Create 3 different faults
 # Fault 'fx' is a Dead Neuron fault to randomly target a neuron of layer SF2
 fx = Fault(DeadNeuron(), FaultSite('SF2'))
-# Fault 'fy' is a Saturated Synapse fault to randomly target a synapse
+# Fault 'fy' is a Stuck Synapse fault to randomly target a synapse
 # between layers SF1 and its predecessor and set the synaptic weight to 10
-fy = Fault(SaturatedSynapse(10), FaultSite('SF1'))
+fy = Fault(StuckSynapse(10.), FaultSite('SF1'))
 # Fault 'fz' is a multiple (4) neuron parametric threshold fault, setting the threshold
 # to half its nominal value in 4 neurons randomly selected across the entire network
 fz = Fault(ThresholdFaultNeuron(0.5), [FaultSite() for _ in range(4)])
@@ -72,11 +72,11 @@ cmpn.eject()
 # Find scale and zero point for the quantization of the synaptic weights
 # of layer 'SF2'
 W = getattr(net, 'SF2').weight
-scale, zero_point, qdtype = qargs_from_tensor(W, torch.quint8)
+scale, zero_point = qargs_from_tensor(W, torch.quint8)
 
 # Create fault model 'fm' to be a Bitflipped Synapse with 8-bit quantized
 # integer synaptic weights, targeting the bit 7 (MSB) to be flipped
-fm = BitflippedSynapse(7, scale, zero_point, qdtype)
+fm = BitflippedSynapse(7, scale, zero_point, torch.quint8)
 # Inject a bit-flipped synapse fault to every synapse of layer 'SF2', one at a time
 cmpn.inject_complete(fm, ['SF2'])
 

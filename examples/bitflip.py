@@ -53,7 +53,7 @@ cmpns_count = 0
 for lay_name in layers:
     # Find scale and zero point for the quantization of the synaptic weights of the layer
     W = getattr(net, lay_name).weight
-    scale, zero_point, _ = qargs_from_tensor(W, qdtype)
+    scale, zero_point = qargs_from_tensor(W, qdtype)
 
     # For each targeted bit position
     for b in bits:
