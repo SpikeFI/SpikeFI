@@ -52,7 +52,7 @@ fy = Fault(StuckSynapse(10.), FaultSite('SF1'))
 fz = Fault(ThresholdFaultNeuron(0.5), [FaultSite() for _ in range(4)])
 
 # Round 0: Inject fault fx (single-fault scenario)
-cmpn.inject([fx])
+cmpn.inject(fx)
 # Round 1: Inject both fy and fz faults (multiple-fault scenario)
 cmpn.then_inject([fy, fz])
 

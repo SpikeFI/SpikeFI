@@ -15,6 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
+from collections.abc import Iterable
 from cycler import cycler
 from difflib import SequenceMatcher
 from itertools import cycle
@@ -37,8 +38,11 @@ CMAP = 'jet'
 CPAL = ["#02580E", "#9C7720", "#104280", "#B7312C", "#DC996C", "#5F1B08", "#FFD19E"]
 
 
-def _data_mapping(cmpns_data: list[CampaignData], layer: str = None,
+def _data_mapping(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
                   fault_model: ff.FaultModel = None) -> dict[tuple[str, ff.FaultModel], dict[int, list[int]]]:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     data_map: dict[tuple[str, ff.FaultModel], dict[int, list[int]]] = {}   # { (layer, fault model): { campaign index, [round index] } }
 
     for cmpn_idx, cmpn_data in enumerate(cmpns_data):
@@ -71,8 +75,11 @@ def _heat_reshape(N: int, R: float) -> tuple[int, int]:
     return (a, int(N / a))
 
 
-def _title(cmpns_data: list[CampaignData], data_map: dict,
+def _title(cmpns_data: CampaignData | Iterable[CampaignData], data_map: dict,
            model_friendly: str, plot_type: str, title_suffix: str, format: str) -> str:
+    if isinstance(cmpns_data, CampaignData):
+        cmpns_data = [cmpns_data]
+
     title_def = ""
 
     if len(data_map) == 1 and plot_type == "heat":
@@ -102,7 +109,7 @@ def _title(cmpns_data: list[CampaignData], data_map: dict,
     return f"{cmpn_name.strip('_')}{model_friendly or ''}{title_def}_{plot_type}{title_suffix or ''}.{format.strip('.')}"
 
 
-def bar(cmpns_data: CampaignData | list[CampaignData],
+def bar(cmpns_data: CampaignData | Iterable[CampaignData],
         model_friendly: str = None, fig_size: tuple[float, float] = None,
         title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
@@ -182,7 +189,7 @@ def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
     return fig
 
 
-def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
+def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
          preserve_dim: bool = False, ratio: float = 1.0, max_area: int = 512**2, show_axes: bool = True,
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
@@ -264,7 +271,7 @@ def heat(cmpns_data: CampaignData | list[CampaignData], layer: str = None, fault
     return figs
 
 
-def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer: str = None,
+def plot(cmpns_data: CampaignData | Iterable[CampaignData], xlabel: str = '', layer: str = None,
          legend_loc: str = "lower right",
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
@@ -325,7 +332,7 @@ def plot(cmpns_data: CampaignData | list[CampaignData], xlabel: str = '', layer:
     return fig
 
 
-def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
+def plot_train(cmpns_data: CampaignData | Iterable[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
                title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -358,7 +365,7 @@ def plot_train(cmpns_data: CampaignData | list[CampaignData], x_range: range, fi
     return fig
 
 
-def learning_curve(cmpns_data: CampaignData | list[CampaignData], fig_size: tuple[float, float] = None,
+def learning_curve(cmpns_data: CampaignData | Iterable[CampaignData], fig_size: tuple[float, float] = None,
                    title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
