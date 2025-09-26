@@ -229,6 +229,18 @@ class Fault:
 
         return separated_faults
 
+    # Concatenates multiple faults of exact same model
+    @staticmethod
+    def buildup(faults: Iterable['Fault']) -> list['Fault']:
+        merged = {}
+        for f in faults:
+            if f.model in merged:
+                merged[f.model] += f
+            else:
+                merged[f.model] = f
+
+        return list(merged.values())
+
     def has_site(self, site: FaultSite) -> bool:
         return site in self.sites
 

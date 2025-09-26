@@ -121,6 +121,7 @@ class Campaign:
 
         self.define_random(faults)
         inj_faults = self.validate(faults)
+        inj_faults = ff.Fault.buildup(inj_faults)
 
         self.rounds[round_idx].insert_many(inj_faults)
 
