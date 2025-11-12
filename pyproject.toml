@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spikefi"
-version = "1.1.0"
+version = "1.2.0"
 description = "An automated fault injection framework for deep spiking neural network applications"
 authors = [
     { name = "Theofilos Spyrou", email = "Theofilos.Spyrou@gmail.com" }
