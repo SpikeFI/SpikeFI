@@ -311,36 +311,12 @@ class Campaign:
         self.reset()
         faulties = []
 
-        ind_neu = ff.FaultTarget.Z.get_index()  # 0
-        ind_syn = ff.FaultTarget.W.get_index()  # 1
-
-        for round in self.rounds:
+        for r, round in enumerate(self.rounds):
             _faulty = deepcopy(self.faulty)
             faulties.append(_faulty)
             self.performance.append(spikeStats())
 
-            # Register neuron faults (pre-)hooks
-            for layer_name in self.layers_info.get_injectables():
-                self.handles.setdefault(layer_name, [[[], []], [[], []]])
-                layer = getattr(self.faulty, layer_name)
-
-                if round.any_neuronal(layer_name):
-                    # Parametric faults (subset of neuronal faults)
-                    if round.any_parametric(layer_name):
-                        for fault in round.search_parametric(layer_name):
-                            # Create parametric faults' dummy layers
-                            fault.model.param_perturb(self.slayer, self.device)
-
-                    following_layer = getattr(_faulty, self.layers_info.get_following(layer_name))
-
-                    # Register neuron fault pre-hooks
-                    pre_hook = self._neuron_hook_wrapper(round.search_neuronal(layer_name), self.layers_info.shapes_neu[layer_name])
-                    self.handles[layer_name][ind_neu][0].append(following_layer.register_forward_pre_hook(pre_hook))
-
-                # Synaptic faults
-                if round.any_synaptic(layer_name):
-                    pre_hook, _ = self._synapse_hook_wrapper(round.search_synaptic(layer_name))
-                    self.handles[layer_name][ind_syn][0].append(layer.register_forward_pre_hook(pre_hook))
+            self._perturb_net(r, round, _faulty, syn_restore=False)
 
         return faulties
 
@@ -397,7 +373,7 @@ class Campaign:
             self.rgroups[oround.late_start_name].append(r)
 
             # Register fault (pre-)hooks for all fault rounds
-            self._perturb_net(oround, r)
+            self._perturb_net(r, oround, self.faulty, syn_restore=True)
 
             # Create statistics for fault rounds
             self.performance.append(spikeStats())
@@ -405,13 +381,13 @@ class Campaign:
         # Sort fault round groups in ascending order of group's earliest layer
         self.rgroups = dict(sorted(self.rgroups.items(), key=lambda item: -1 if item[0] is None else self.layers_info.index(item[0])))
 
-    def _perturb_net(self, round: ff.FaultRound, r: int) -> None:
+    def _perturb_net(self, r: int, round: ff.FaultRound, faulty: nn.Module, syn_restore: bool) -> None:
         ind_neu = ff.FaultTarget.Z.get_index()  # 0
         ind_syn = ff.FaultTarget.W.get_index()  # 1
 
         for layer_name in self.layers_info.get_injectables():
             self.handles.setdefault(layer_name, [[[], []], [[], []]])
-            layer = getattr(self.faulty, layer_name)
+            layer = getattr(faulty, layer_name)
 
             # Neuronal faults
             if round.any_neuronal(layer_name):
@@ -425,7 +401,7 @@ class Campaign:
                         self.handles[layer_name][ind_neu][1] = layer.register_forward_hook(hook)
 
                 # Neuronal faults for last layer are evaluated on a 'tail' layer that does nothing
-                following_layer = getattr(self.faulty, self.layers_info.get_following(layer_name))
+                following_layer = getattr(faulty, self.layers_info.get_following(layer_name))
                 # Register neuron fault pre-hooks (on the layer succeeding the faulty layer)
                 pre_hook = self._neuron_hook_wrapper(round.search_neuronal(layer_name), self.layers_info.shapes_neu[layer_name], r)
                 self.handles[layer_name][ind_neu][0].append(following_layer.register_forward_pre_hook(pre_hook))
@@ -435,7 +411,8 @@ class Campaign:
                 # Register synapse (perturb) pre-hook and (restore) hook (on the faulty layer)
                 pre_hook, hook = self._synapse_hook_wrapper(round.search_synaptic(layer_name), r)
                 self.handles[layer_name][ind_syn][0].append(layer.register_forward_pre_hook(pre_hook))
-                self.handles[layer_name][ind_syn][1].append(layer.register_forward_hook(hook))
+                if syn_restore:
+                    self.handles[layer_name][ind_syn][1].append(layer.register_forward_hook(hook))
 
     def _post_run(self, update_stats: bool = True):
         self.duration = self.progress.get_duration_sec()

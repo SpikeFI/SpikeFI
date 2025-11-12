@@ -47,13 +47,12 @@ fx = Fault(DeadNeuron(), FaultSite('SF2', (3, 0, 0)))
 # Fault 'fy' is a Stuck Synapse fault between layers SF1 and SF2
 fy = Fault(StuckSynapse(10.), FaultSite('SF1', (0, 0, 0, 0)))
 # Fault 'fz' is a multiple neuron parametric threshold fault in layer SF1
-fz = Fault(ThresholdFaultNeuron(3), [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0)),
-                                     FaultSite('SF2', (2, 0, 0)), FaultSite('SF2', (1, 0, 0))])
+fz = Fault(ThresholdFaultNeuron(3), [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0))])
 
 # Round 0: Inject fault fx (single-fault scenario)
-cmpn.inject(fz)
+cmpn.inject(fx)
 # Round 1: Inject both fy and fz faults (multi-fault scenario)
-# cmpn.then_inject([fy, fz])
+cmpn.then_inject([fy, fz])
 
 print(cmpn)
 
