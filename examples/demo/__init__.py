@@ -1,22 +1,21 @@
 __all__ = ["architectures", "utils", "setup_nmnist", "setup_gesture",
-           "Dataset", "Network"
-           ]
+           "Dataset", "Network"]
 
 import os
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import slayerSNN as snn
-import spikefi.utils.io as sfi_io
+import spikefi.utils.io as sfio
 
 
 SUPPORTED_CASE_STUDIES = ['nmnist-lenet', 'nmnist-deep', 'gesture']
 DEMO_DIR = os.path.dirname(__file__)
 WORK_DIR = os.path.join(DEMO_DIR, '..')
 
-sfi_io.OUT_DIR = os.path.join(WORK_DIR, sfi_io.OUT_DIR)
-sfi_io.RES_DIR = os.path.join(WORK_DIR, sfi_io.RES_DIR)
-sfi_io.FIG_DIR = os.path.join(WORK_DIR, sfi_io.FIG_DIR)
-sfi_io.NET_DIR = os.path.join(WORK_DIR, sfi_io.NET_DIR)
+sfio.OUT_DIR = os.path.join(WORK_DIR, sfio.OUT_DIR)
+sfio.RES_DIR = os.path.join(WORK_DIR, sfio.RES_DIR)
+sfio.FIG_DIR = os.path.join(WORK_DIR, sfio.FIG_DIR)
+sfio.NET_DIR = os.path.join(WORK_DIR, sfio.NET_DIR)
 
 case_study = None
 dropout_en = None
@@ -73,7 +72,7 @@ def prepare(casestudy: str, dropout: bool = False, fyamlname=None, batchsize=Non
 
 def get_net(fpath: str = None, trial: int = None) -> 'Network':
     net = Network(net_params, dropout_en).to(device)
-    net_path = fpath or sfi_io.make_net_filepath(get_fnetname(trial))
+    net_path = fpath or sfio.make_net_filepath(get_fnetname(trial))
     net.load_state_dict(torch.load(net_path, weights_only=True))
     net.eval()
 
@@ -106,7 +105,7 @@ def get_base_fname(train: bool = False) -> str:
 
 
 def get_trial() -> int:
-    return sfi_io.calculate_trial(get_base_fname() + '_net.pt', sfi_io.NET_DIR)
+    return sfio.calculate_trial(get_base_fname() + '_net.pt', sfio.NET_DIR)
 
 
 def get_trial_str(trial: int = None) -> str:

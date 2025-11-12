@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import pickle
 import torch
 import slayerSNN as snn
-import spikefi.utils.io as sfi_io
+import spikefi.utils.io as sfio
 import demo
 
 
@@ -98,10 +98,10 @@ for epoch in range(n_epochs):
 
     # Save the trained network instance with the best testing accuracy
     if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
-        torch.save(net.state_dict(), sfi_io.make_net_filepath(demo.get_fnetname(trial)))
+        torch.save(net.state_dict(), sfio.make_net_filepath(demo.get_fnetname(trial)))
 
 # Save stats in a pickle file
-with open(sfi_io.make_out_filepath(demo.get_fstaname(trial)), 'wb') as stats_file:
+with open(sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb') as stats_file:
     pickle.dump(stats, stats_file)
 
 # Plot the training results (learning curves) and save in a .png file
@@ -118,4 +118,4 @@ plt.yticks(ticks=range(0, 100, 2), minor=True)
 plt.grid(visible=True, which='both', axis='both')
 plt.xlim((1, n_epochs))
 plt.ylim((0., 100.))
-plt.savefig(sfi_io.make_fig_filepath(demo.get_ffigname(trial, format='png')))
+plt.savefig(sfio.make_fig_filepath(demo.get_ffigname(trial, format='png')))

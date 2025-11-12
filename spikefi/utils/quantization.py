@@ -43,7 +43,7 @@ def qargs_exact(xmin: float, xmax: float, qmin: int, qmax: int) -> tuple[float, 
 
 
 def qargs_precision(xmin: float, xmax: float, p: int) -> tuple[float, int]:
-    return qargs_exact(xmin, xmax, 0, 2**p-1)
+    return qargs_exact(xmin, xmax, 0, 2**p - 1)
 
 
 def qargs_from_range(xmin: float, xmax: float, dtype: torch.dtype) -> tuple[float, int]:

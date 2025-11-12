@@ -38,13 +38,13 @@ import slayerSNN as snn
 from slayerSNN.slayer import spikeLayer
 from slayerSNN.utils import stats as spikeStats
 
-import spikefi.fault as ff
-import spikefi.utils.io as sfi_io
+import spikefi.fault as sff
+import spikefi.utils.io as sfio
 from spikefi.utils.layer import LayersInfo
 from spikefi.utils.progress import CampaignProgress, refresh_progress_job
 
 
-VERSION = version("spikefi")
+__version__ = version("spikefi")
 
 
 class CampaignOptimization(Enum):
@@ -73,8 +73,8 @@ class Campaign:
 
         self.r_idx = 0
         self.duration = 0.
-        self.rounds: list[ff.FaultRound] = [ff.FaultRound()]
-        self.orounds: list[ff.OptimizedFaultRound] = []
+        self.rounds: list[sff.FaultRound] = [sff.FaultRound()]
+        self.orounds: list[sff.OptimizedFaultRound] = []
         self.rgroups: dict[str, list[int]] = {}
         self.handles: dict[str, list[list[list[RemovableHandle]]]] = {}  # layer - neuron/synapse - pre-hook/hook
         self.performance: list[spikeStats] = []
@@ -118,22 +118,22 @@ class Campaign:
         for handle in handles:
             handle.remove()
 
-    def inject(self, faults: ff.Fault | Iterable[ff.Fault], round_idx: int = -1) -> list[ff.Fault]:
+    def inject(self, faults: sff.Fault | Iterable[sff.Fault], round_idx: int = -1) -> list[sff.Fault]:
         assert -len(self.rounds) <= round_idx < len(self.rounds), f'Invalid round index {round_idx}'
 
-        if isinstance(faults, ff.Fault):
+        if isinstance(faults, sff.Fault):
             faults = [faults]
 
         self.define_random(faults)
         inj_faults = self.validate(faults)
-        inj_faults = ff.Fault.buildup(inj_faults)
+        inj_faults = sff.Fault.buildup(inj_faults)
 
         self.rounds[round_idx].insert_many(inj_faults)
 
         return inj_faults
 
-    def define_random(self, faults: ff.Fault | Iterable[ff.Fault]) -> Iterable[ff.Fault]:
-        if isinstance(faults, ff.Fault):
+    def define_random(self, faults: sff.Fault | Iterable[sff.Fault]) -> Iterable[sff.Fault]:
+        if isinstance(faults, sff.Fault):
             faults = [faults]
 
         # Uniqueness of fault sites for multiple faults is guaranteed for all sites
@@ -173,8 +173,8 @@ class Campaign:
 
         return faults
 
-    def validate(self, faults: ff.Fault | Iterable[ff.Fault]) -> list[ff.Fault]:
-        if isinstance(faults, ff.Fault):
+    def validate(self, faults: sff.Fault | Iterable[sff.Fault]) -> list[sff.Fault]:
+        if isinstance(faults, sff.Fault):
             faults = [faults]
 
         valid_faults = []
@@ -201,11 +201,11 @@ class Campaign:
 
         return valid_faults
 
-    def then_inject(self, faults: ff.Fault | Iterable[ff.Fault]) -> list[ff.Fault]:
-        self.rounds.append(ff.FaultRound())
+    def then_inject(self, faults: sff.Fault | Iterable[sff.Fault]) -> list[sff.Fault]:
+        self.rounds.append(sff.FaultRound())
         return self.inject(faults, -1)
 
-    def inject_complete(self, fault_model: ff.FaultModel, layer_names: str | Iterable[str] = [], fault_sampling_k: int = None) -> list[ff.Fault]:
+    def inject_complete(self, fault_model: sff.FaultModel, layer_names: str | Iterable[str] = [], fault_sampling_k: int = None) -> list[sff.Fault]:
         if isinstance(layer_names, str):
             layer_names = [layer_names]
 
@@ -240,13 +240,13 @@ class Campaign:
         inj_faults = []
         for p in inj_pos:
             inj_faults.append(self.then_inject(
-                [ff.Fault(fault_model, ff.FaultSite(p[0], p[1:] if is_syn else p[2:]))]
+                [sff.Fault(fault_model, sff.FaultSite(p[0], p[1:] if is_syn else p[2:]))]
             ))
 
         return inj_faults
 
-    def eject(self, faults: ff.Fault | Iterable[ff.Fault] = None, round_idx: int = None) -> None:
-        if isinstance(faults, ff.Fault):
+    def eject(self, faults: sff.Fault | Iterable[sff.Fault] = None, round_idx: int = None) -> None:
+        if isinstance(faults, sff.Fault):
             faults = [faults]
 
         # Eject from a specific round
@@ -270,11 +270,11 @@ class Campaign:
                 self.rounds.clear()
 
         if not self.rounds:
-            self.rounds.append(ff.FaultRound())
+            self.rounds.append(sff.FaultRound())
 
     def reset(self) -> None:
         if not self.rounds:
-            self.rounds = [ff.FaultRound()]
+            self.rounds = [sff.FaultRound()]
 
         # Reset fault round variables
         self.r_idx = 0
@@ -381,9 +381,9 @@ class Campaign:
         # Sort fault round groups in ascending order of group's earliest layer
         self.rgroups = dict(sorted(self.rgroups.items(), key=lambda item: -1 if item[0] is None else self.layers_info.index(item[0])))
 
-    def _perturb_net(self, r: int, round: ff.FaultRound, faulty: nn.Module, syn_restore: bool) -> None:
-        ind_neu = ff.FaultTarget.Z.get_index()  # 0
-        ind_syn = ff.FaultTarget.W.get_index()  # 1
+    def _perturb_net(self, r: int, round: sff.FaultRound, faulty: nn.Module, syn_restore: bool) -> None:
+        ind_neu = sff.FaultTarget.Z.get_index()  # 0
+        ind_syn = sff.FaultTarget.W.get_index()  # 1
 
         for layer_name in self.layers_info.get_injectables():
             self.handles.setdefault(layer_name, [[[], []], [[], []]])
@@ -543,7 +543,7 @@ class Campaign:
             stat.lossSum += spike_loss.numSpikes(output, target).cpu().item()
 
     def export(self) -> 'CampaignData':
-        return CampaignData(VERSION, self)
+        return CampaignData(__version__, self)
 
     def save(self, fname: str = None) -> None:
         self.export().save(fname)
@@ -553,7 +553,7 @@ class Campaign:
         if not to_save:
             return
 
-        torch.save(to_save.state_dict(), sfi_io.make_net_filepath((fname or self.name) + '.pt', rename=True))
+        torch.save(to_save.state_dict(), sfio.make_net_filepath((fname or self.name) + '.pt', rename=True))
 
     @staticmethod
     def load(fpath: str, unpickler_type: type[pickle.Unpickler] = None) -> 'Campaign':
@@ -592,7 +592,7 @@ class Campaign:
 
         return forward_opt
 
-    def _neuron_hook_wrapper(self, faults: list[ff.Fault], layer_shape: tuple[int, int, int], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+    def _neuron_hook_wrapper(self, faults: list[sff.Fault], layer_shape: tuple[int, int, int], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def neuron_pre_hook(_, args: tuple[Tensor, ...]) -> None:
             if self.r_idx != r_idx:
                 return
@@ -612,7 +612,7 @@ class Campaign:
 
         return neuron_pre_hook
 
-    def _neuron_param_hook_wrapper(self, faults: list[ff.Fault], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+    def _neuron_param_hook_wrapper(self, faults: list[sff.Fault], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def neuron_param_hook(_, __, spikes_out: Tensor) -> None:
             if self.r_idx != r_idx:
                 return
@@ -626,7 +626,7 @@ class Campaign:
 
         return neuron_param_hook
 
-    def _synapse_hook_wrapper(self, faults: list[ff.Fault], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+    def _synapse_hook_wrapper(self, faults: list[sff.Fault], r_idx: int) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def _synapse_hook_core(to_perturb: bool, layer: nn.Module) -> None:
             if self.r_idx != r_idx:
                 return
@@ -690,13 +690,13 @@ class CampaignData:
         campaign.rgroups = self.rgroups
         campaign.performance = self.performance
 
-        if self.version != VERSION:
+        if self.version != __version__:
             warn('The loaded campaign object was created with a different version of the SpikeFI framework.', DeprecationWarning)
 
         return campaign
 
     def save(self, fname: str = None) -> None:
-        with open(sfi_io.make_res_filepath((fname or self.name) + '.pkl', rename=True), 'wb') as pkl:
+        with open(sfio.make_res_filepath((fname or self.name) + '.pkl', rename=True), 'wb') as pkl:
             pickle.dump(self, pkl)
 
     @staticmethod

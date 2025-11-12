@@ -30,7 +30,7 @@ import re
 import torch
 
 from spikefi.core import CampaignData
-import spikefi.fault as ff
+import spikefi.fault as sff
 from spikefi.utils.io import make_fig_filepath
 
 
@@ -39,11 +39,11 @@ CPAL = ["#02580E", "#9C7720", "#104280", "#B7312C", "#DC996C", "#5F1B08", "#FFD1
 
 
 def _data_mapping(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
-                  fault_model: ff.FaultModel = None) -> dict[tuple[str, ff.FaultModel], dict[int, list[int]]]:
+                  fault_model: sff.FaultModel = None) -> dict[tuple[str, sff.FaultModel], dict[int, list[int]]]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
-    data_map: dict[tuple[str, ff.FaultModel], dict[int, list[int]]] = {}   # { (layer, fault model): { campaign index, [round index] } }
+    data_map: dict[tuple[str, sff.FaultModel], dict[int, list[int]]] = {}   # { (layer, fault model): { campaign index, [round index] } }
 
     for cmpn_idx, cmpn_data in enumerate(cmpns_data):
         for lay, r_idxs in cmpn_data.rgroups.items():
@@ -144,7 +144,7 @@ def bar(cmpns_data: CampaignData | Iterable[CampaignData],
         for i in range(101):
             offset = (width + space) * offset_mult[lay]
             b = ax.bar(layers.index(lay) + offset, groups_cent[i], width,
-                       bottom=bottom, color=colormap(i/100.0))
+                       bottom=bottom, color=colormap(i / 100.0))
 
             bottom += groups_cent[i]
 
@@ -162,7 +162,7 @@ def bar(cmpns_data: CampaignData | Iterable[CampaignData],
     ax.set_ylabel("Faults (%)")
     ax.set_yticks(range(0, 101, 10))
     ax.set_xlabel('Layers')
-    ax.set_xticks([i + (width/2 + space/2) * (offset_mult[lay]-1) for i, lay in enumerate(layers)], layers)
+    ax.set_xticks([i + (width / 2 + space / 2) * (offset_mult[lay] - 1) for i, lay in enumerate(layers)], layers)
 
     if to_save:
         plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "bar", title_suffix, format))
@@ -189,7 +189,7 @@ def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
     return fig
 
 
-def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, fault_model: ff.FaultModel = None,
+def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, fault_model: sff.FaultModel = None,
          preserve_dim: bool = False, ratio: float = 1.0, max_area: int = 512**2, show_axes: bool = True,
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
@@ -271,8 +271,8 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
     return figs
 
 
-def plot(cmpns_data: CampaignData | Iterable[CampaignData], xlabel: str = '', layer: str = None,
-         legend_loc: str = "lower right",
+def plot(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
+         legend_loc: str = "lower right", xlabel: str = '',
          model_friendly: str = None, fig_size: tuple[float, float] = None,
          title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
     if isinstance(cmpns_data, CampaignData):
