@@ -56,7 +56,7 @@ net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 # Calculate total number of FI campaigns
 cmpns_count = 0
 cmpns_total = len(layers) * len(s_batch) * len(n_faults) * \
-              np.sum(np.where(np.array(opts) >= sfi.CampaignOptimization.O3.value, len(es_tol), 1))
+    np.sum(np.where(np.array(opts) >= sfi.CampaignOptimization.O3.value, len(es_tol), 1))
 
 # For each targeted layer
 for lay_name in layers:
@@ -96,23 +96,23 @@ for lay_name in layers:
                     if k_actual > 0:
                         if lay_name:
                             # Try to inject k faults
-                            cmpn.inject_complete(f_model, [lay_name], fault_sampling_k=k_actual)
+                            cmpn.inject_complete(f_model, lay_name, fault_sampling_k=k_actual)
 
                             # Fault hyper-sampling
                             while k - len(cmpn.rounds) > 0:
-                                cmpn.then_inject([sfi.ff.Fault(f_model, sfi.ff.FaultSite(lay_name))])
+                                cmpn.then_inject(sfi.ff.Fault(f_model, sfi.ff.FaultSite(lay_name)))
                         else:
                             # Equally distribute faults across layers
                             k_lay = int(k_actual / len(cmpn.layers_info.get_injectables()))
                             for lay in cmpn.layers_info.get_injectables():
-                                n_lay = len(cmpn.inject_complete(f_model, [lay], fault_sampling_k=k_lay))
+                                n_lay = len(cmpn.inject_complete(f_model, lay, fault_sampling_k=k_lay))
                                 rghist.setdefault(lay, 0)
                                 rghist[lay] += n_lay
 
                             # Inject remaining faults
                             while k - len(cmpn.rounds) > 0:
                                 min_lay = min(rghist, key=rghist.get)
-                                cmpn.then_inject([sfi.ff.Fault(f_model, sfi.ff.FaultSite(min_lay))])
+                                cmpn.then_inject(sfi.ff.Fault(f_model, sfi.ff.FaultSite(min_lay)))
                                 rghist[min_lay] += 1
 
                 # Early Stop optimization tolerance
@@ -134,7 +134,7 @@ for lay_name in layers:
                                    es_tol=t, opt=sfi.CampaignOptimization(o))
 
                     durations.append(cmpn.duration)
-                    print(f"Campaign duration: {cmpn.duration : .2f} secs")
+                    print(f"Campaign duration: {cmpn.duration: .2f} secs")
 
                     # Get the number of critical faults
                     if cri is not None:

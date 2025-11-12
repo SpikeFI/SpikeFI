@@ -65,7 +65,7 @@ for lay_name in layers:
         # Inject bitflipped synapse faults across 250^2 randomly selected synaptic weights in the layer
         # Creates a separate fault round containing a single fault each
         cmpn.inject_complete(sfi.fm.BitflippedSynapse(b, scale, zero_point, qdtype),
-                             [lay_name], fault_sampling_k=250**2)
+                             lay_name, fault_sampling_k=250**2)
 
         # Print status information
         print(f"Campaign {cmpns_count}/{cmpns_total}: '{cmpn.name}'")
