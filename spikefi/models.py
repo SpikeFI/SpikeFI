@@ -26,7 +26,7 @@ from torch import Tensor
 
 from slayerSNN.slayer import spikeLayer
 
-from spikefi.fault import FaultModel, FaultSite, FaultTarget
+from spikefi.fault import FaultModel, FaultTarget
 from spikefi.utils.quantization import qiinfo
 
 
@@ -71,7 +71,7 @@ def bfl_value(original: Tensor, bit: int | Iterable[int] | Tensor,
 # Mother class for parametric faults
 class ParametricNeuronFaultModel(FaultModel):
     def __init__(self, param_name: str, param_method: Callable[..., float | Tensor], *param_args) -> None:
-        super().__init__(FaultTarget.PARAMETER, set_value, dict())
+        super().__init__(FaultTarget.PARAMETER, set_value, tuple())
         self.method.__name__ = 'set_value'
 
         self.param_name = param_name
@@ -112,9 +112,6 @@ class ParametricNeuronFaultModel(FaultModel):
         self.param_perturbed = None
 
         return self.flayer.neuron[self.param_name]
-
-    def perturb(self, original: float | Tensor, site: FaultSite) -> float | Tensor:
-        return super().perturb(original, site, self.args[0].pop(site))
 
 
 @dataclass
@@ -176,9 +173,9 @@ class StuckNeuron(FaultModel):
 
 class RandomNeuron(RandomFaultModel):
     DEF_MODEL_CHOICES = [
-        RandomModelChoice(DeadNeuron, select_chance=2/3),
-        RandomModelChoice(SaturatedNeuron, select_chance=1/6),
-        RandomModelChoice(StuckNeuron, select_chance=1/6)
+        RandomModelChoice(DeadNeuron, select_chance=2 / 3),
+        RandomModelChoice(SaturatedNeuron, select_chance=1 / 6),
+        RandomModelChoice(StuckNeuron, select_chance=1 / 6)
     ]
 
     def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
@@ -261,8 +258,8 @@ class BitflippedSynapse(FaultModel):
 
 class RandomSynapse(RandomFaultModel):
     DEF_MODEL_CHOICES = [
-        RandomModelChoice(DeadSynapse, select_chance=2/3),
-        RandomModelChoice(PerturbedSynapse, select_chance=1/3)
+        RandomModelChoice(DeadSynapse, select_chance=2 / 3),
+        RandomModelChoice(PerturbedSynapse, select_chance=1 / 3)
     ]
 
     def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:

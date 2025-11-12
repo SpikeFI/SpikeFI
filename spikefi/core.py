@@ -59,6 +59,7 @@ class Campaign:
     def __init__(self, net: nn.Module, shape_in: tuple[int, int, int], slayer: spikeLayer, name: str = 'sfi-campaign') -> None:
         self.name = name
         self.golden = net
+        setattr(self.golden, 'tail', torch.nn.Identity())
         self.golden.eval()
         self.faulty = None
         self.slayer = slayer
@@ -75,7 +76,7 @@ class Campaign:
         self.rounds: list[ff.FaultRound] = [ff.FaultRound()]
         self.orounds: list[ff.OptimizedFaultRound] = []
         self.rgroups: dict[str, list[int]] = {}
-        self.handles: dict[str, list[list[RemovableHandle]]] = {}
+        self.handles: dict[str, list[list[list[RemovableHandle]]]] = {}  # layer - neuron/synapse - pre-hook/hook
         self.performance: list[spikeStats] = []
 
     def __repr__(self) -> str:
@@ -111,7 +112,8 @@ class Campaign:
             handles.append(handle)
 
         dummy_input = torch.rand((1, *self.layers_info.shape_in, 1)).to(self.device)
-        self.golden(dummy_input)
+        out = self.golden(dummy_input)
+        self.golden.tail(out)
 
         for handle in handles:
             handle.remove()
@@ -144,7 +146,7 @@ class Campaign:
 
             for s in f.sites_pending:
                 if not s.layer:
-                    s.layer = self.layers_info.get_random_inj()
+                    s.layer = self.layers_info.get_random_inj(is_syn)
 
                 l_count.setdefault(s.layer, 0)
                 l_count[s.layer] += 1
@@ -152,8 +154,6 @@ class Campaign:
             for lay, l_site_num in l_count.items():
                 ranges = [range(dim) for dim in self.layers_info.get_shape(is_syn, lay)]
                 all_comb = list(product(*ranges))
-                if not is_syn:
-                    all_comb = [(slice(None), *p) for p in all_comb]
 
                 pos_excl = [p for p in [fs.position for fs in f.sites if fs.layer == lay]]
                 pos_comb = [p for p in all_comb if p not in pos_excl]
@@ -171,7 +171,7 @@ class Campaign:
             f.refresh(discard_duplicates=True)
             assert f.is_complete()
 
-            return faults
+        return faults
 
     def validate(self, faults: ff.Fault | Iterable[ff.Fault]) -> list[ff.Fault]:
         if isinstance(faults, ff.Fault):
@@ -189,14 +189,8 @@ class Campaign:
                 v = self.layers_info.is_injectable(s.layer)
                 if v:
                     shape = self.layers_info.get_shape(is_syn, s.layer)
-                    if is_syn:
-                        v &= -shape[0] <= s.position[0] < shape[0]
-
-                    for i in range(1, 4):
-                        # shapes_neu index values, si: 0-2
-                        # shapes_syn index values, si: 1-3
-                        si = i - (not is_syn)
-                        v &= -shape[si] <= s.position[i] < shape[si]
+                    for i in range(len(s.position)):
+                        v &= -shape[i] <= s.position[i] < shape[i]
 
                 if not v:
                     to_remove.add(s)
@@ -317,6 +311,9 @@ class Campaign:
         self.reset()
         faulties = []
 
+        ind_neu = ff.FaultTarget.Z.get_index()  # 0
+        ind_syn = ff.FaultTarget.W.get_index()  # 1
+
         for round in self.rounds:
             _faulty = deepcopy(self.faulty)
             faulties.append(_faulty)
@@ -324,34 +321,33 @@ class Campaign:
 
             # Register neuron faults (pre-)hooks
             for layer_name in self.layers_info.get_injectables():
-                layer = getattr(_faulty, layer_name)
+                self.handles.setdefault(layer_name, [[[], []], [[], []]])
+                layer = getattr(self.faulty, layer_name)
 
-                if not round.any_neuronal(layer_name):
-                    # Synaptic faults are (re-)inserted at the beginning of every training epoch
-                    continue
+                if round.any_neuronal(layer_name):
+                    if not self.layers_info.is_output(layer_name):
+                        following_layer = getattr(_faulty, self.layers_info.get_following(layer_name))
 
-                if not self.layers_info.is_output(layer_name):
-                    following_layer = getattr(_faulty, self.layers_info.get_following(layer_name))
+                        # Register neuron fault pre-hooks
+                        pre_hook = self._neuron_hook_wrapper(round.search_neuronal(layer_name), is_out_layer=False)
+                        self.handles[layer_name][ind_neu][0].append(following_layer.register_forward_pre_hook(pre_hook))
+                    else:
+                        out_layer = getattr(_faulty, self.layers_info.get_injectables()[-1])
 
-                    # Register neuron fault pre-hooks
-                    pre_hook = self._neuron_pre_hook_wrapper(layer_name, faults=round.search_neuronal(layer_name))
-                    following_layer.register_forward_pre_hook(pre_hook)
-                else:
-                    out_layer = getattr(_faulty, self.layers_info.get_injectables()[-1])
+                        # Register neuron fault hook for output layer only
+                        hook = self._neuron_hook_wrapper(faults=round.search_neuronal(layer_name), is_out_layer=True)
+                        self.handles[layer_name][ind_neu][1].append(out_layer.register_forward_hook(hook))
 
-                    # Register neuron fault hook for output layer only
-                    hook = self._neuron_out_hook_wrapper(layer_name, faults=round.search_neuronal(layer_name))
-                    out_layer.register_forward_hook(hook)
+                    # Parametric faults (subset of neuronal faults)
+                    if round.any_parametric(layer_name):
+                        for fault in round.search_parametric(layer_name):
+                            # Create parametric faults' dummy layers
+                            fault.model.param_perturb(self.slayer, self.device)
 
-                # Parametric faults (subset of neuronal faults)
-                if round.any_parametric(layer_name):
-                    for fault in round.search_parametric(layer_name):
-                        # Create parametric faults' dummy layers
-                        fault.model.param_perturb(self.slayer, self.device)
-
-                    # Register parametric fault hooks
-                    hook = self._parametric_hook_wrapper(layer_name, faults=round.search_parametric(layer_name))
-                    layer.register_forward_hook(hook)
+                # Synaptic faults
+                if round.any_synaptic(layer_name):
+                    pre_hook, _ = self._synapse_hook_wrapper(round.search_synaptic(layer_name))
+                    self.handles[layer_name][ind_syn][0].append(layer.register_forward_pre_hook(pre_hook))
 
         return faulties
 
@@ -418,43 +414,38 @@ class Campaign:
 
     def _perturb_net(self, round: ff.FaultRound) -> None:
         ind_neu = ff.FaultTarget.Z.get_index()  # 0
-        ind_par = ff.FaultTarget.P.get_index()  # 2
         ind_syn = ff.FaultTarget.W.get_index()  # 1
 
         for layer_name in self.layers_info.get_injectables():
-            self.handles.setdefault(layer_name, [[None] * 2 for _ in range(3)])
+            self.handles.setdefault(layer_name, [[[], []], [[], []]])
             layer = getattr(self.faulty, layer_name)
 
             # Neuronal faults
             if round.any_neuronal(layer_name):
-                # Neuronal faults for last layer are evaluated directly on faulty network's output
-                if not self.layers_info.is_output(layer_name) and not self.handles[layer_name][ind_neu][0]:
-                    following_layer = getattr(self.faulty, self.layers_info.get_following(layer_name))
-
-                    # Register neuron fault pre-hooks
-                    pre_hook = self._neuron_pre_hook_wrapper(layer_name, round.search_neuronal(layer_name))
-                    self.handles[layer_name][ind_neu][0] = following_layer.register_forward_pre_hook(pre_hook)
-
                 # Parametric faults (subset of neuronal faults)
                 if round.any_parametric(layer_name):
                     for fault in round.search_parametric(layer_name):
                         # Create parametric faults' dummy layers
                         fault.model.param_perturb(self.slayer, self.device)
 
-                    if not self.handles[layer_name][ind_par][1]:
-                        # Register parametric fault hooks
-                        hook = self._parametric_hook_wrapper(layer_name, round.search_parametric(layer_name))
-                        self.handles[layer_name][ind_par][1] = layer.register_forward_hook(hook)
+                        hook = self._neuron_param_hook_wrapper(round.search_parametric(layer_name))
+                        self.handles[layer_name][ind_neu][1] = layer.register_forward_hook(hook)
+
+                # TODO: Check 'tail' layer pre-hook and REMOVE hook for output layer
+                # Neuronal faults for last layer are evaluated on a 'tail' layer that does nothing
+                if not self.layers_info.is_output(layer_name):
+                    following_layer = getattr(self.faulty, self.layers_info.get_following(layer_name))
+
+                    # Register neuron fault pre-hooks
+                    pre_hook = self._neuron_hook_wrapper(round.search_neuronal(layer_name))
+                    self.handles[layer_name][ind_neu][0].append(following_layer.register_forward_pre_hook(pre_hook))
 
             # Synaptic faults
-            if round.any_synaptic(layer_name) and not any(self.handles[layer_name][ind_syn]):
-                # Register synapse fault pre-hooks
-                pre_hook = self._synaptic_pre_hook_wrapper(layer_name, round.search_synaptic(layer_name))
-                self.handles[layer_name][ind_syn][0] = layer.register_forward_pre_hook(pre_hook)
-
-                # Register synapse fault hooks
-                hook = self._synaptic_hook_wrapper(layer_name, round.search_synaptic(layer_name))
-                self.handles[layer_name][ind_syn][1] = layer.register_forward_hook(hook)
+            if round.any_synaptic(layer_name):
+                # Register synapse (perturb) pre-hook and (restore) hook
+                pre_hook, hook = self._synapse_hook_wrapper(round.search_synaptic(layer_name))
+                self.handles[layer_name][ind_syn][0].append(layer.register_forward_pre_hook(pre_hook))
+                self.handles[layer_name][ind_syn][1].append(layer.register_forward_hook(hook))
 
     def _post_run(self, update_stats: bool = True):
         self.duration = self.progress.get_duration_sec()
@@ -480,15 +471,6 @@ class Campaign:
         optimizer_params = {k: v for param_group in optimizer.param_groups for k, v in param_group.items() if k != 'params'}
         optimizer_ = optimizer_class(faulty.parameters(), **optimizer_params)
 
-        # Register synaptic pre-hooks
-        syn_handles = {}
-        round = self.rounds[self.r_idx]
-        for layer_name in self.layers_info.get_injectables():
-            layer = getattr(faulty, layer_name)
-            if round.any_synaptic(layer_name):
-                pre_hook = self._synaptic_pre_hook_wrapper(layer_name, round.search_synaptic(layer_name))
-                syn_handles[layer_name] = layer.register_forward_pre_hook(pre_hook)
-
         for _ in range(epochs):
             self.progress.step_epoch()
             faulty.train()
@@ -511,32 +493,18 @@ class Campaign:
 
             self.performance[self.r_idx].update()
 
-            # Keep the best network based on the max testing accuracy (needs to include the testing loop)
-            # if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
-            #   self.save_net(faulty, "faulty_temp")
-        # os.remove("faulty_temp.pt")
-
-        # Final set of the faulty synapses & synaptic pre-hooks removal
-        if syn_handles:
-            faulty.forward(input.to(self.device))
-            for handle in syn_handles.values():
-                handle.remove()
+        # Final set of faulty synapses (if any)
+        # Hooks are not removed from the final network
+        faulty.forward(input.to(self.device))
 
         faulty.eval()
 
     def _evaluate_single(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
-        is_out_faulty = self.orounds[self.r_idx].is_out_faulty
-        out_name = self.layers_info.order[-1]
-        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
-
         for _, (_, input, target, label) in enumerate(test_loader):
             self.progress.step_batch()
             output = self.faulty(input.to(self.device))
-            if is_out_faulty:
-                out_neuron_callable(None, (output,))
 
             self._advance_performance(output, target.to(self.device), label, spike_loss)
-
             self.progress.step()
 
     def _evaluate_O0(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
@@ -546,29 +514,18 @@ class Campaign:
                 self._evaluate_single(test_loader, spike_loss)
 
     def _evaluate_O1(self, test_loader: DataLoader, spike_loss: snn.loss = None) -> None:
-        out_name = self.layers_info.order[-1]
-        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
-
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
             self.progress.step_batch()
 
             for round_group in self.rgroups.values():  # For each fault round group
                 for self.r_idx in round_group:  # For each fault round
                     self.progress.step_round()
-
-                    oround = self.orounds[self.r_idx]
-
                     output = self.faulty(input.to(self.device))
-                    if oround.is_out_faulty:
-                        out_neuron_callable(None, (output,))
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
-
                     self.progress.step()
 
     def _evaluate_optimized(self, test_loader: DataLoader, spike_loss: snn.loss = None, es_tol: int = 0) -> Tensor:
-        out_name = self.layers_info.order[-1]
-        out_neuron_callable = self._neuron_pre_hook_wrapper(out_name, self.orounds[self.r_idx].search_neuronal(out_name))
         N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
 
         for _, (_, input, target, label) in enumerate(test_loader):  # For each batch
@@ -590,8 +547,6 @@ class Campaign:
 
                     if not oround.early_stop_en:
                         output = self.faulty(golden_spikes[ls_idx], ls_idx)
-                        if oround.is_out_faulty:
-                            out_neuron_callable(None, (output,))
                     else:
                         # Early stop optimization
                         early_stop_next_out = self.faulty(golden_spikes[ls_idx], ls_idx, es_idx + 1)
@@ -607,7 +562,6 @@ class Campaign:
                     N_critical[self.r_idx] += torch.sum((golden_prediction == label) & (prediction != label))
 
                     self._advance_performance(output, target.to(self.device), label, spike_loss)
-
                     self.progress.step()
 
         return N_critical
@@ -661,68 +615,59 @@ class Campaign:
                 layer = getattr(self, layer_name)
                 spikes = layer(spikes)
 
-                if layers_info.types[layer_name] is not snn.slayer._dropoutLayer:
-                    # Dropout layers are not useful in inference but they may have registered pre-hooks
-                    spikes = slayer.spike(slayer.psp(spikes))
+                # Skip dropout and tail layers from calling slayer functions
+                if layers_info.types[layer_name] in (snn.slayer._dropoutLayer, nn.Identity):
+                    continue
+
+                spikes = slayer.spike(slayer.psp(spikes))
 
             return spikes
 
         return forward_opt
 
-    def _neuron_pre_hook_wrapper(self, layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+    def _neuron_hook_wrapper(self, faults: list[ff.Fault]) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def neuron_pre_hook(_, args: tuple[Tensor, ...]) -> None:
             prev_spikes_out = args[0]
-            if prev_spikes_out.shape[1:4] != self.layers_info.shapes_neu[layer_name]:
-                return
+            for fault in faults:  # or self.orounds[self.r_idx].search_neuronal(layer_name)
+                all_ind = fault.unroll()
+                param_args = (fault.model.unstore(), )
 
-            for fault in faults or self.orounds[self.r_idx].search_neuronal(layer_name):
-                for site in fault.sites:
-                    ind = site.unroll()
-                    prev_spikes_out[ind] = fault.model.perturb(prev_spikes_out[ind], site)
+                prev_spikes_out[:, *all_ind, :] = fault.model.perturb(
+                    prev_spikes_out[:, *all_ind, :],
+                    *(param_args if param_args != (None,) else fault.model.args))
 
         return neuron_pre_hook
 
-    def _neuron_out_hook_wrapper(self, out_layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
-        # Used in train mode only
-        def neuron_out_hook(_, __, spikes_out: Tensor) -> None:
-            for fault in faults or self.orounds[self.r_idx].search_neuronal(out_layer_name):
-                for site in fault.sites:
-                    ind = site.unroll()
-                    spikes_out[ind] = fault.model.perturb(spikes_out[ind], site)
+    def _neuron_param_hook_wrapper(self, faults: list[ff.Fault]) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+        def neuron_param_hook(_, __, spikes_out: Tensor) -> None:
+            for fault in faults:
+                all_ind = fault.unroll()
 
-        return neuron_out_hook
-
-    def _parametric_hook_wrapper(self, layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...], Tensor], None]:
-        def parametric_hook(_, __, spikes_out: Tensor) -> None:
-            for fault in faults or self.orounds[self.r_idx].search_parametric(layer_name):
                 flayer = fault.model.flayer
                 fspike_out = flayer.spike(flayer.psp(spikes_out))
+                fault.model.store(fspike_out[:, *all_ind, :])
 
-                for site in fault.sites:
-                    fault.model.args[0][site] = fspike_out[site.unroll()]
+        return neuron_param_hook
 
-        return parametric_hook
+    def _synapse_hook_wrapper(self, faults: list[ff.Fault]) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
+        def _synapse_hook_core(to_perturb: bool, layer: nn.Module) -> None:
+            for fault in faults:  # or self.orounds[self.r_idx].search_synaptic(layer_name):
+                all_ind = fault.unroll()
+                with torch.no_grad():
+                    if to_perturb:
+                        layer.weight[*all_ind] = fault.model.perturb_store(layer.weight[*all_ind])
+                    else:
+                        layer.weight[*all_ind] = fault.model.restore()
 
-    # Perturb weights for layer's synapse faults
-    def _synaptic_pre_hook_wrapper(self, layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
-        def synaptic_pre_hook(layer: nn.Module, _) -> None:
-            for fault in faults or self.orounds[self.r_idx].search_synaptic(layer_name):
-                for site in fault.sites:
-                    ind = site.unroll()
-                    with torch.no_grad():
-                        layer.weight[ind] = fault.model.perturb_store(layer.weight[ind], site)
+        # Perturb weights for layer's synapse faults
+        def synapse_pre_hook(layer: nn.Module, _) -> None:
+            _synapse_hook_core(to_perturb=True, layer=layer)
 
-        return synaptic_pre_hook
+        # Restore weights after layer's synapse faults evaluation
+        def synapse_hook(layer: nn.Module, _, __) -> None:
+            _synapse_hook_core(to_perturb=False, layer=layer)
 
-    # Restore weights after layer's synapse faults evaluation
-    def _synaptic_hook_wrapper(self, layer_name: str, faults: list[ff.Fault] = None) -> Callable[[nn.Module, tuple[Tensor, ...], Tensor], None]:
-        def synaptic_hook(layer: nn.Module, _, __) -> None:
-            for fault in faults or self.orounds[self.r_idx].search_synaptic(layer_name):
-                for site in fault.sites:
-                    with torch.no_grad():
-                        layer.weight[site.unroll()] = fault.model.restore(site)
-
-        return synaptic_hook
+        return synapse_pre_hook, synapse_hook
 
 
 class CampaignData:

@@ -24,19 +24,19 @@ from operator import or_
 import random
 import re
 
+import torch
 from torch import Tensor
 
 from spikefi.utils.layer import LayersInfo
 
 
 class FaultSite:
-    def __init__(self, layer_name: str = None, position: tuple[int | slice, int, int, int] = (None,) * 4) -> None:
-        # pos0 is integer for synaptic faults and either integer or slice for neuron faults
+    def __init__(self, layer_name: str = "", position: tuple[int, ...] = ()) -> None:
         self.layer = layer_name
 
-        if position is not None:
-            assert len(position) == 4, 'Position tuple must have a length of 4'
-        self.position = position or (None,) * 4
+        if position:
+            assert len(position) in (3, 4), 'Position must be a tuple of length 3 or 4 for neuron or synapse faults, respectively.'
+        self.position = position or tuple()
 
     def __bool__(self) -> bool:
         return self is not None and self.is_defined()
@@ -52,16 +52,22 @@ class FaultSite:
             + "(" + ", ".join(list(map(FaultSite.pos2str, self.position))) + ")"
 
     def _key(self) -> tuple:
-        pos0 = self.position[0]
-        pos0_key = (pos0.start, pos0.stop, pos0.step) if isinstance(pos0, slice) else pos0
+        if not self.position or len(self.position) == 3:
+            pos_key = (-1,) + self.position
+        else:
+            pos_key = self.position
 
-        return self.layer, pos0_key, self.position[1:]
+        return self.layer, pos_key
 
     def is_defined(self) -> bool:
-        return bool(self.layer) and all(pos is not None for pos in self.position)
+        return bool(self.layer) and self.position is not None and len(self.position) in (3, 4)
 
-    def unroll(self) -> tuple[int | slice, int, int, int, slice]:
-        return self.position + (slice(None),)
+    def unroll(self, full_5D: bool = False) -> tuple[int | slice, ...]:
+        if full_5D:
+            tore = ((slice(None),) + self.position) if len(self.position) == 3 else self.position
+            return tore + (slice(None),)
+
+        return self.position
 
     @staticmethod
     def pos2str(x: int) -> str:
@@ -100,8 +106,8 @@ class FaultModel:
         self.method = method
         self.args = args
 
-        self.original: dict[FaultSite, float | Tensor] = {}
-        self.perturbed: dict[FaultSite, float | Tensor] = {}
+        self.original: float | Tensor = None
+        self.perturbed: float | Tensor = None
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, FaultModel) and self._key() == other._key()
@@ -140,24 +146,34 @@ class FaultModel:
     def is_synaptic(self) -> bool:
         return self.target in FaultTarget.synaptic()
 
-    def is_perturbed(self, site: FaultSite) -> bool:
-        return site is not None and site in self.original and site in self.perturbed
+    def is_perturbed(self) -> bool:
+        return self.original is not None and self.perturbed is not None
 
-    # The second argument is needed in order to be in accordance with the perturb method of ParametricNeuronFaultModel
-    def perturb(self, original: float | Tensor, _: FaultSite, *new_args) -> float | Tensor:
+    def perturb(self, original: float | Tensor, *new_args) -> float | Tensor:
         return self.method(original, *(new_args or self.args))
 
-    def perturb_store(self, original: float | Tensor, site: FaultSite) -> float | Tensor:
-        self.original[site] = original
+    def perturb_store(self, original: float | Tensor) -> float | Tensor:
+        self.original = original
+        self.perturbed = self.perturb(original)
 
-        perturbed = self.perturb(original, site)
-        self.perturbed[site] = perturbed
+        return self.perturbed
 
-        return perturbed
+    def restore(self) -> float | Tensor:
+        self.perturbed = None
+        original = self.original
 
-    def restore(self, site: FaultSite) -> float | Tensor:
-        self.perturbed.pop(site)
-        return self.original.pop(site)
+        return original
+
+    def store(self, perturbed: float | Tensor) -> None:
+        self.perturbed = perturbed
+
+        return
+
+    def unstore(self) -> float | Tensor:
+        tore = self.perturbed
+        self.perturbed = None
+
+        return tore
 
 
 class Fault:
@@ -252,6 +268,11 @@ class Fault:
 
     def is_multiple(self) -> bool:
         return len(self) > 1
+
+    def unroll(self) -> tuple[Tensor, ...]:
+        # Grouped unrolled site indices per dimension
+        unrolled_per_dim = zip(*(s.position for s in self.sites))
+        return tuple(torch.tensor(v, dtype=torch.int64) for v in unrolled_per_dim)
 
     @staticmethod
     def merge(faults: list['Fault']) -> 'Fault':
@@ -502,7 +523,6 @@ class OptimizedFaultRound(FaultRound):
 
         # If there are only neuronal faults, late-start layer can be increased
         # because the fault effect is evaluated on the next layer's pre-hook
-        # TODO: Explore the same when there are parametric-only faults (param hooks can run on the golden net but only for the faults in the late-start layer)
         if self.neuronal_only and not self.parametric_only:
             self.late_start_idx += 1
             if self.late_start_idx < len(layers_info):

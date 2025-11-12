@@ -43,25 +43,25 @@ cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 
 # Create 3 different faults
 # Fault 'fx' is a Dead Neuron fault to randomly target a neuron of layer SF2
-fx = Fault(DeadNeuron(), FaultSite('SF2'))
-# Fault 'fy' is a Stuck Synapse fault to randomly target a synapse
+fx = Fault(DeadNeuron(), [FaultSite('SF2', (3, 0, 0))])
+# Fault 'fy' is a Stuck Synapse fault to target the first synapse
 # between layers SF1 and its predecessor and set the synaptic weight to 10
-fy = Fault(StuckSynapse(10.), FaultSite('SF1'))
-# Fault 'fz' is a multiple (4) neuron parametric threshold fault, setting the threshold
-# to half its nominal value in 4 neurons randomly selected across the entire network
-fz = Fault(ThresholdFaultNeuron(0.5), [FaultSite() for _ in range(4)])
+fy = Fault(StuckSynapse(10.), FaultSite('SF1', (0, 0, 0, 0)))
+# Fault 'fz' is a multiple (2) neuron parametric threshold fault, setting the threshold
+# to 3x its nominal value in 2 neurons of layer 'SF1'
+fz = Fault(ThresholdFaultNeuron(3), [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0))])
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject(fx)
-# Round 1: Inject both fy and fz faults (multiple-fault scenario)
-cmpn.then_inject([fy, fz])
+# Round 1: Inject both fy and fz faults (multi-fault scenario)
+cmpn.inject([fy, fz])
 
 # Execute the fault injection experiments, applying all optimizations
 cmpn.run(test_loader, opt=sfi.CampaignOptimization.O4)
 
 # Show the results, i.e., the classification accuracy corresponding to each fault round
 for r, perf in enumerate(cmpn.performance):
-    print(f"Round {r} performance: {perf.testing.maxAccuracy * 100.0} %")
+    print(f"Round {r} performance: {perf.testing.maxAccuracy * 100.0:.2f} %")
 
 # Save the campaign and its results to 'out -> res -> basic-fi.pkl'
 cmpn.save()

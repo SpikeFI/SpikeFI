@@ -101,8 +101,8 @@ class LayersInfo:
         idx = self.index(injectable_name)
         return self.order[idx + 1] if idx < len(self) - 1 else None
 
-    def get_random_inj(self) -> str:
-        return random.choices(self.get_injectables(), weights=self.get_sizes_inj(), k=1)[0]
+    def get_random_inj(self, syn_select: bool) -> str:
+        return random.choices(self.get_injectables(), weights=self.get_sizes_inj(syn_select), k=1)[0]
 
     def get_shape(self, syn_select: bool, name: str) -> tuple[int, ...]:
         return self.shapes_syn[name] if syn_select else self.shapes_neu[name]
