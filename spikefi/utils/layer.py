@@ -19,9 +19,7 @@ from collections.abc import Callable
 from math import prod
 import random
 from typing import Any
-
 from torch import nn, Tensor
-
 from slayerSNN import slayer
 
 

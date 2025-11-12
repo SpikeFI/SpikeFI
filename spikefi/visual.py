@@ -20,14 +20,15 @@ from cycler import cycler
 from difflib import SequenceMatcher
 from itertools import cycle
 from math import prod, sqrt
+import numpy as np
+import re
+import torch
+
 import matplotlib as mpl
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator, MaxNLocator
 import matplotlib.patheffects as path_effects
-import numpy as np
-import re
-import torch
 
 from spikefi.core import CampaignData
 import spikefi.fault as sff
