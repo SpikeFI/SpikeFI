@@ -9,7 +9,9 @@ from demo.utils.data import extract_file, create_symlink
 
 def get_action_names(gesture_path: str) -> list[str]:
     action_names = []
-    with open(os.path.join(gesture_path, 'gesture_mapping.csv'), newline='') as csvfile:
+    with open(
+        os.path.join(gesture_path, 'gesture_mapping.csv'), newline=''
+    ) as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header
 
@@ -32,13 +34,23 @@ def read_aedat_event(fname: str) -> tuple[list[float]]:
     return xEvent, yEvent, pEvent, tEvent
 
 
-def split_data(id: int, sample: str, action_names: list[str], gesture_path: str, aedat_path: str) -> int:
+def split_data(
+        id: int,
+        sample: str,
+        action_names: list[str],
+        gesture_path: str,
+        aedat_path: str
+) -> int:
     # Read raw DVS events
     x, y, p, t = read_aedat_event(os.path.join(aedat_path, sample + '.aedat'))
     x, y, p, t = map(np.array, (x, y, p, t))
 
     # Load label file: columns = [action, start_time, end_time]
-    labels = np.loadtxt(os.path.join(aedat_path, sample + '_labels.csv'), delimiter=',', skiprows=1)
+    labels = np.loadtxt(
+        os.path.join(aedat_path, sample + '_labels.csv'),
+        delimiter=',',
+        skiprows=1
+    )
     labels[:, 0] -= 1  # Adjust action index to start at 0
 
     split = 'Train' if id <= 23 else 'Test'
@@ -54,12 +66,15 @@ def split_data(id: int, sample: str, action_names: list[str], gesture_path: str,
 
         # Select indices for events in the label time window
         mask = (t >= t_start / 1000) & (t < t_end / 1000)
-        t_segment = t[mask] - t_start / 1000  # Normalize timestamps to start from 0
+        # Normalize timestamps to start from 0
+        t_segment = t[mask] - t_start / 1000
         TD = snn.io.event(x[mask], y[mask], p[mask], t_segment)
 
         # Save encoded spike tensor
         a = int(action)
-        out_fpath = os.path.join(gesture_path, split, str(a), f'{sample}_{action_names[a]}_{a}.npy')
+        out_fpath = os.path.join(
+            gesture_path, split, str(a), f'{sample}_{action_names[a]}_{a}.npy'
+        )
         snn.io.encodeNpSpikes(out_fpath, TD)
 
     return count
@@ -82,8 +97,11 @@ def convert(gesture_path: str, aedat_dir: str = 'Aedat') -> None:
             sample = f'user{id:02d}_{light}'
 
             if os.path.isfile(os.path.join(aedat_path, sample + '.aedat')):
-                print(f"Converting samples for user {id:02d} under '{light.replace('_', ' ')}' light")
-                total_samples += split_data(id, sample, action_names, gesture_path, aedat_path)
+                print(f"Converting samples for user {id:02d} "
+                      f"under '{light.replace('_', ' ')}' light")
+                total_samples += split_data(
+                    id, sample, action_names, gesture_path, aedat_path
+                )
 
     print(f"{total_samples} samples were created in total.")
 
@@ -133,7 +151,10 @@ def organize(datasets_path: str, default_path: str, zip_path: str) -> None:
         'trials_to_test.txt', 'trials_to_train.txt', 'errata.txt'
     ]
     for fname in base_files:
-        shutil.move(os.path.join(aedat_path, fname), os.path.join(gesture_path, fname))
+        shutil.move(
+            os.path.join(aedat_path, fname),
+            os.path.join(gesture_path, fname)
+        )
 
     print("Converting dataset to numpy format...")
     convert(gesture_path)

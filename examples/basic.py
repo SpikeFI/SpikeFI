@@ -20,7 +20,9 @@
 import os
 import torch
 import spikefi as sfi
-from spikefi.models import DeadNeuron, StuckSynapse, ThresholdFaultNeuron, BitflippedSynapse
+from spikefi.models import (
+    DeadNeuron, StuckSynapse, ThresholdFaultNeuron, BitflippedSynapse
+)
 from spikefi.fault import FaultSite, Fault
 from spikefi.core import Campaign
 from spikefi.utils.quantization import qargs_from_tensor
@@ -43,11 +45,20 @@ cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 
 # Create 3 different faults
 # Fault 'fx' is a Dead Neuron in layer SF2
-fx = Fault(DeadNeuron(), FaultSite('SF2', (3, 0, 0)))
+fx = Fault(
+    DeadNeuron(),
+    FaultSite('SF2', (3, 0, 0))
+)
 # Fault 'fy' is a Stuck Synapse fault between layers SF1 and SF2
-fy = Fault(StuckSynapse(10.), FaultSite('SF1', (0, 0, 0, 0)))
+fy = Fault(
+    StuckSynapse(10.),
+    FaultSite('SF1', (0, 0, 0, 0))
+)
 # Fault 'fz' is a multiple neuron parametric threshold fault in layer SF1
-fz = Fault(ThresholdFaultNeuron(3), [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0))])
+fz = Fault(
+    ThresholdFaultNeuron(3),
+    [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0))]
+)
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject(fx)
@@ -59,7 +70,7 @@ print(cmpn)
 # Execute the fault injection experiments, applying all optimizations
 cmpn.run(test_loader, opt=sfi.CampaignOptimization.O4)
 
-# Show the results, i.e., the classification accuracy corresponding to each fault round
+# Show the results: the classification accuracy of each fault round
 for r, perf in enumerate(cmpn.performance):
     print(f"Round {r} performance: {perf.testing.maxAccuracy * 100.0:.2f} %")
 
@@ -77,20 +88,32 @@ scale, zero_point = qargs_from_tensor(W, torch.quint8)
 # Create fault model 'fm' to be a Bitflipped Synapse with 8-bit quantized
 # integer synaptic weights, targeting the bit 7 (MSB) to be flipped
 fm = BitflippedSynapse(7, scale, zero_point, torch.quint8)
-# Inject a bit-flipped synapse fault to every synapse of layer 'SF2', one at a time
+# Inject a bit-flipped synapse fault to
+# every synapse of layer 'SF2', one at a time
 cmpn.inject_complete(fm, ['SF2'])
 
-# Execute the fault injection experiments targeting the synapses of whole layer,
-# when only one is faulty at a time
+# Execute the fault injection experiments targeting the synapses
+# of whole layer, when only one is faulty at a time
 cmpn.run(test_loader)
 
 # Export campaign data to use with visualization tools
 cmpn_data = cmpn.export()
 
-# Visualize the results using a heatmap plot stored at 'out -> fig -> basic-fi_7_heat.png'
+# Visualize the results using a heatmap plot
+# stored at 'out -> fig -> basic-fi_7_heat.png'
 # The 'fig' object can be stored in a pickle file for later use/edit
 preserve_dim = 'nmnist' in demo.case_study
-fig = sfi.visual.heat(cmpn_data, preserve_dim=preserve_dim, format='png', title_suffix=demo.case_study)
+fig = sfi.visual.heat(
+    cmpn_data,
+    preserve_dim=preserve_dim,
+    format='png',
+    title_suffix=demo.case_study
+)
 
 # Save the campaign and its results to 'out -> res -> bitflip_7_SF2.pkl'
-cmpn.save(sfi.utils.io.make_res_filepath(demo.case_study + '_bitflip_7_SF2', rename=True))
+cmpn.save(
+    sfi.utils.io.make_res_filepath(
+        demo.case_study + '_bitflip_7_SF2',
+        rename=True
+    )
+)

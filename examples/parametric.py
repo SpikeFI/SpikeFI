@@ -34,12 +34,14 @@ import demo
 
 
 # Configuration parameters for the neuron parametric FI experiments
-# Select one or more layers to target (use an empty string '' to target the whole network)
+# Select one or more layers to target
+# (use an empty string '' to target the whole network)
 layers = ['SC2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select one or more neuron parameters to target
 params = ['theta']  # For example: 'theta', 'tauSr', 'tauRef'
-# Select the percentages of the parameter nominal values to set the faulty values
-percent = range(10, 301, 10)    # For example: from 10% to 300% with a step of 10%
+# Select the percentages of the parameter
+# nominal values to set the faulty values
+percent = range(10, 301, 10)    # For example: 10% - 300% with a step of 10%
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout
@@ -62,25 +64,36 @@ for param in params:
         # For each faulty percentage of the nominal value
         for cent in percent:
             # Create a SpikeFI Campaign with a descriptive name
-            cmpn_name = demo.get_fnetname().removesuffix('.pt') + f"_neuron_{param}_{lay_name or 'ALL'}_c{cent}"
+            cmpn_name = (
+                demo.get_fnetname().removesuffix('.pt')
+                + f"_neuron_{param}_{lay_name or 'ALL'}_c{cent}"
+            )
             cmpn = sfi.Campaign(net, demo.shape_in, net.slayer, name=cmpn_name)
             cmpns_count += 1
 
             # Inject parametric neuron faults across all neurons of the layer
             # with a faulty parameter value set to cent% of the nominal value
             # Creates a separate fault round containing a single fault each
-            cmpn.inject_complete(sfi.fm.ParametricNeuron(param, cent / 100.0), [lay_name])
+            cmpn.inject_complete(
+                sfi.fm.ParametricNeuron(param, cent / 100.0),
+                lay_name
+            )
 
             # Print status information
             print(f"Campaign {cmpns_count}/{cmpns_total}: '{cmpn.name}'")
 
-            # Execute FI experiments for current targeted neuron parameter, layer, and faulty percentage
-            cmpn.run(test_loader, spike_loss=snn.loss(demo.net_params).to(cmpn.device))
+            # Execute FI experiments for current targeted
+            # neuron parameter, layer, and faulty percentage
+            cmpn.run(
+                test_loader,
+                spike_loss=snn.loss(demo.net_params).to(cmpn.device)
+            )
 
             # Print the duration of the FI campaign in seconds
             print(f"Duration: {cmpn.duration: .2f} secs")
 
-            # Keep the campaign data aside to use later in the combinatorial plot
+            # Keep the campaign data aside
+            # to use later in the combinatorial plot
             cmpns_data.append(cmpn.export())
 
             # Save the campaign results in a pkl file
@@ -89,4 +102,8 @@ for param in params:
     # Visualize results as a function of the parameter's value deviation
     # Creates one plot per neuron parameter
     # The 'fig' object can be stored in a pickle file for later use/edit
-    fig = sfi.visual.plot(cmpns_data, xlabel=f"{param} (% of nominal value)", format='png')
+    fig = sfi.visual.plot(
+        cmpns_data,
+        xlabel=f"{param} (% of nominal value)",
+        format='png'
+    )

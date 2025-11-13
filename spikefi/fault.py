@@ -31,11 +31,18 @@ from spikefi.utils.layer import LayersInfo
 
 
 class FaultSite:
-    def __init__(self, layer_name: str = "", position: tuple[int, ...] = ()) -> None:
+    def __init__(
+            self,
+            layer_name: str = "",
+            position: tuple[int, ...] = ()
+    ) -> None:
         self.layer = layer_name
 
         if position:
-            assert len(position) in (3, 4), 'Position must be a tuple of length 3 or 4 for neuron or synapse faults, respectively.'
+            assert len(position) in (3, 4), (
+                'Position must be a tuple of length 3 or 4 '
+                'for neuron or synapse faults, respectively.'
+            )
         self.position = position or tuple()
 
     def __bool__(self) -> bool:
@@ -48,8 +55,10 @@ class FaultSite:
         return hash(self._key())
 
     def __repr__(self) -> str:
-        return "Fault Site @ layer '" + (self.layer or '*') + "' " \
-            + "(" + ", ".join(list(map(FaultSite.pos2str, self.position))) + ")"
+        return (
+            "Fault Site @ layer '" + (self.layer or '*') + "' ("
+            + ", ".join(list(map(FaultSite.pos2str, self.position))) + ")"
+        )
 
     def _key(self) -> tuple:
         if not self.position or len(self.position) == 3:
@@ -60,12 +69,19 @@ class FaultSite:
         return self.layer, pos_key
 
     def is_defined(self) -> bool:
-        return bool(self.layer) and self.position is not None and len(self.position) in (3, 4)
+        return (
+            bool(self.layer)
+            and self.position is not None
+            and len(self.position) in (3, 4)
+        )
 
     def unroll(self, full_5D: bool = False) -> tuple[int | slice, ...]:
         if full_5D:
-            tore = ((slice(None),) + self.position) if len(self.position) == 3 else self.position
-            return tore + (slice(None),)
+            return (
+                ((slice(None),) + self.position)
+                if len(self.position) == 3
+                else self.position
+            ) + (slice(None),)
 
         return self.position
 
@@ -100,7 +116,11 @@ class FaultTarget(Flag):
 
 
 class FaultModel:
-    def __init__(self, target: FaultTarget, method: Callable[..., float | Tensor], *args) -> None:
+    def __init__(
+            self,
+            target: FaultTarget,
+            method: Callable[..., float | Tensor], *args
+    ) -> None:
         assert len(target) == 1, 'Fault Model must have exactly 1 Fault Target'
         self.target = target
         self.method = method
@@ -116,13 +136,18 @@ class FaultModel:
         return hash(self._key())
 
     def __repr__(self) -> str:
-        return f"Fault Model: '{self.get_name()}'\n" \
-            + f"  - Target: {self.target}\n" \
-            + f"  - Method: {self.method.__name__}\n" \
+        return (
+            f"Fault Model: '{self.get_name()}'\n"
+            + f"  - Target: {self.target}\n"
+            + f"  - Method: {self.method.__name__}\n"
             + f"  - Arguments: {self.args}"
+        )
 
     def __str__(self) -> str:
-        return f"Fault Model '{self.get_name()}': {self.target}, {self.method.__name__}"
+        return (
+            f"Fault Model '{self.get_name()}': "
+            + f"{self.target}, {self.method.__name__}"
+        )
 
     def _key(self) -> tuple:
         return self.target, self.method, self.args
@@ -131,7 +156,11 @@ class FaultModel:
         name = self.__class__.__name__
         return 'CustomFault' if name == FaultModel.__name__ else name
 
-    def get_name_snake_case(self, reverse: bool = True, delimiter: str = '_') -> str:
+    def get_name_snake_case(
+            self,
+            reverse: bool = True,
+            delimiter: str = '_'
+    ) -> str:
         words = re.findall(r'[A-Z][a-z]*', self.get_name())
         words = [word.lower() for word in words]
 
@@ -177,7 +206,11 @@ class FaultModel:
 
 
 class Fault:
-    def __init__(self, model: FaultModel, sites: FaultSite | Iterable[FaultSite] = None) -> None:
+    def __init__(
+            self,
+            model: FaultModel,
+            sites: FaultSite | Iterable[FaultSite] = None
+    ) -> None:
         self.model = model
         self.sites: set[FaultSite] = set()
         self.sites_pending: list[FaultSite] = []
@@ -191,8 +224,14 @@ class Fault:
             self.add_site(sites)
 
     def __add__(self, other: 'Fault') -> 'Fault':
-        assert self.model == other.model, 'Only two Faults with the same Fault Model can be added'
-        return Fault(deepcopy(self.model), self.get_sites(include_pending=True) + other.get_sites(include_pending=True))
+        assert self.model == other.model, (
+            'Only two Faults with the same Fault Model can be added'
+        )
+        return Fault(
+            deepcopy(self.model),
+            self.get_sites(include_pending=True)
+            + other.get_sites(include_pending=True)
+        )
 
     def __bool__(self) -> bool:
         return self is not None and bool(self.sites)
@@ -203,7 +242,7 @@ class Fault:
     def __eq__(self, other: object) -> bool:
         # Equality is checked so as the Faults were injected "as is",
         # therefore it does not take into account the pending Fault Sites,
-        # as they are considered random sites and are not yet defined (finalized)
+        # as they are considered random sites and are not yet defined
         return isinstance(other, Fault) and self.sites == other.sites
 
     def __len__(self) -> int:
@@ -261,7 +300,9 @@ class Fault:
         return site in self.sites
 
     def get_sites(self, include_pending: bool = False) -> list[FaultSite]:
-        return list(self.sites) + (self.sites_pending if include_pending else [])
+        return (
+            list(self.sites) + (self.sites_pending if include_pending else [])
+        )
 
     def is_complete(self) -> bool:
         return not self.sites_pending
@@ -272,7 +313,9 @@ class Fault:
     def unroll(self) -> tuple[Tensor, ...]:
         # Grouped unrolled site indices per dimension
         unrolled_per_dim = zip(*(s.position for s in self.sites))
-        return tuple(torch.tensor(v, dtype=torch.int64) for v in unrolled_per_dim)
+        return tuple(
+            torch.tensor(v, dtype=torch.int64) for v in unrolled_per_dim
+        )
 
     @staticmethod
     def merge(faults: list['Fault']) -> 'Fault':
@@ -291,8 +334,12 @@ class Fault:
         return fault
 
     @staticmethod
-    def multiple_random_absolute(model: FaultModel, sites_num: int, layers: list[str] = None,
-                                 layer_sizes: list[int] = None) -> 'Fault':
+    def multiple_random_absolute(
+        model: FaultModel,
+        sites_num: int,
+        layers: list[str] = None,
+        layer_sizes: list[int] = None
+    ) -> 'Fault':
         sites = []
         for _ in range(sites_num):
             ran_lay = random.choices(layers, weights=layer_sizes, k=1)[0]
@@ -301,12 +348,18 @@ class Fault:
         return Fault(model, sites)
 
     @staticmethod
-    def multiple_random_percent(model: FaultModel, fault_density: float, layers: list[str] = None,
-                                layer_sizes: list[int] = None) -> 'Fault':
+    def multiple_random_percent(
+        model: FaultModel,
+        fault_density: float,
+        layers: list[str] = None,
+        layer_sizes: list[int] = None
+    ) -> 'Fault':
         faults = []
         for i, layer in enumerate(layers):
             sites_num = ceil(layer_sizes[i] * fault_density)
-            faults.append(Fault.multiple_random_absolute(model, sites_num, [layer]))
+            faults.append(
+                Fault.multiple_random_absolute(model, sites_num, [layer])
+            )
 
         return Fault.merge(faults)
 
@@ -339,7 +392,14 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         self.fault_map: dict[str, list[bool]] = {}
 
         # Construct from an Iterable of Faults
-        if 'faults' in kwargs or (bool(args) and isinstance(args[0], Iterable) and all(isinstance(el, Fault) for el in args[0])):
+        if (
+            'faults' in kwargs
+            or (
+                bool(args)
+                and isinstance(args[0], Iterable)
+                and all(isinstance(el, Fault) for el in args[0])
+            )
+        ):
             super().__init__()
             self.insert_many(kwargs.get('faults', args[0]))
             return
@@ -361,7 +421,11 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
 
         return s + '\n}'
 
-    def any(self, layer_name: str, target: FaultTarget = FaultTarget.all()) -> bool:
+    def any(
+            self,
+            layer_name: str,
+            target: FaultTarget = FaultTarget.all()
+    ) -> bool:
         layer_map = self.fault_map.get(layer_name, [False] * 3)
         return any(layer_map[t.get_index()] for t in target)
 
@@ -375,8 +439,15 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         return self.any(layer_name, FaultTarget.synaptic())
 
     # Exclusive any
-    def xany(self, layer_name: str, target: FaultTarget = FaultTarget.all()) -> bool:
-        return self.any(layer_name, target) and not self.any(layer_name, ~target)
+    def xany(
+            self,
+            layer_name: str,
+            target: FaultTarget = FaultTarget.all()
+    ) -> bool:
+        return (
+            self.any(layer_name, target)
+            and not self.any(layer_name, ~target)
+        )
 
     def xany_neuronal(self, layer_name: str) -> bool:
         return self.xany(layer_name, FaultTarget.neuronal())
@@ -403,7 +474,7 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         if faults is None:
             return
         if not isinstance(faults, Iterable):
-            raise TypeError(f"'{type(faults).__name__}' object is not iterable")
+            raise TypeError(f"'{type(faults).__name__}' is not iterable.")
 
         for f in faults:
             self.extract(f)
@@ -424,12 +495,15 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         if faults is None:
             return
         if not isinstance(faults, Iterable):
-            raise TypeError(f"'{type(faults).__name__}' object is not iterable")
+            raise TypeError(f"'{type(faults).__name__}' is not iterable.")
 
         for f in faults:
             self.insert(f)
 
-    def get_faults(self, target: FaultTarget = FaultTarget.all()) -> list[Fault]:
+    def get_faults(
+            self,
+            target: FaultTarget = FaultTarget.all()
+    ) -> list[Fault]:
         return [self[k] for k in self if k[1].target in target]
 
     def get_neuronal(self) -> list[Fault]:
@@ -441,8 +515,16 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
     def get_synaptic(self) -> list[Fault]:
         return self.get_faults(FaultTarget.synaptic())
 
-    def search(self, layer_name: str, target: FaultTarget = FaultTarget.all()) -> list[Fault]:
-        return [self[k] for k in self if k[0] == layer_name and k[1].target in target]
+    def search(
+            self,
+            layer_name: str,
+            target: FaultTarget = FaultTarget.all()
+    ) -> list[Fault]:
+        return [
+            self[k]
+            for k in self
+            if k[0] == layer_name and k[1].target in target
+        ]
 
     def search_neuronal(self, layer_name: str) -> list[Fault]:
         return self.search(layer_name, FaultTarget.neuronal())
@@ -453,8 +535,15 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
     def search_synaptic(self, layer_name: str) -> list[Fault]:
         return self.search(layer_name, FaultTarget.synaptic())
 
-    def optimized(self, layers_info: LayersInfo, late_start_en: bool = True, early_stop_en: bool = True) -> 'OptimizedFaultRound':
-        oround = OptimizedFaultRound(self, layers_info, late_start_en, early_stop_en)
+    def optimized(
+            self,
+            layers_info: LayersInfo,
+            late_start_en: bool = True,
+            early_stop_en: bool = True
+    ) -> 'OptimizedFaultRound':
+        oround = OptimizedFaultRound(
+            self, layers_info, late_start_en, early_stop_en
+        )
         oround.fault_map = deepcopy(self.fault_map)
 
         return oround
@@ -462,10 +551,29 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
 
 # Optimized Fault Round applies only in faults after training
 class OptimizedFaultRound(FaultRound):
-    def __init__(self, round: FaultRound, layers_info: LayersInfo, late_start_en: bool = True, early_stop_en: bool = True) -> None:
-        # Sort round's faults in ascending order of faults appearance (late-start layer first)
-        super().__init__(FaultRound(sorted(round.items(), key=lambda item: layers_info.index(item[0][0]))))
-        self.fault_map = dict(sorted(self.fault_map.items(), key=lambda item: layers_info.index(item[0])))
+    def __init__(
+            self,
+            round: FaultRound,
+            layers_info: LayersInfo,
+            late_start_en: bool = True,
+            early_stop_en: bool = True
+    ) -> None:
+        # Sort round's faults in ascending order of faults appearance
+        # (late-start layer first)
+        super().__init__(
+            FaultRound(
+                sorted(
+                    round.items(),
+                    key=lambda item: layers_info.index(item[0][0])
+                )
+            )
+        )
+        self.fault_map = dict(
+            sorted(
+                self.fault_map.items(),
+                key=lambda item: layers_info.index(item[0])
+            )
+        )
 
         self.is_out_faulty = any(layers_info.is_output(key[0]) for key in self)
 
@@ -480,7 +588,8 @@ class OptimizedFaultRound(FaultRound):
             self.parametric_only &= fm.is_parametric()
             self.synaptic_only &= fm.is_synaptic()
 
-        # Late-Start and Early-Stop layers are the first and last ones to contain a fault, respectively
+        # Late-Start and Early-Stop layers are the first and last ones
+        # to contain a fault, respectively
         # For a single fault, the late-start and early-stop layers are the same
         self.late_start_en = late_start_en
         self.late_start_name = layers_info.order[0]
@@ -489,7 +598,8 @@ class OptimizedFaultRound(FaultRound):
         self.early_stop_name = None
         self.early_stop_idx = None
 
-        # For an empty round (golden inference), the late-start layer is None and its idx is equal to the layer number
+        # For an empty round (golden inference), the late-start layer is None
+        # and its idx is equal to the layer number
         if not self:
             self.late_start_en = True
             self.late_start_idx = len(layers_info)
@@ -502,15 +612,24 @@ class OptimizedFaultRound(FaultRound):
         round_iter = iter(self)
 
         self.late_start_name = next(round_iter, (None,))[0]
-        self.late_start_idx = layers_info.index(self.late_start_name) if self.late_start_name else None
+        self.late_start_idx = (
+            layers_info.index(self.late_start_name)
+            if self.late_start_name
+            else None
+        )
 
         if self.early_stop_en:
             self.early_stop_name = self.late_start_name
             for key in round_iter:
                 self.early_stop_name = key[0]
-            self.early_stop_idx = layers_info.index(self.early_stop_name) if self.early_stop_name else None
+            self.early_stop_idx = (
+                layers_info.index(self.early_stop_name)
+                if self.early_stop_name
+                else None
+            )
 
-            # Early-Stop is meaningful only when at least the 2 last layers are fault-free
+            # Early-Stop is meaningful only when at least
+            # the 2 last layers are fault-free
             if self.early_stop_idx >= len(layers_info) - 2:
                 self.early_stop_en = False
                 self.early_stop_name = None

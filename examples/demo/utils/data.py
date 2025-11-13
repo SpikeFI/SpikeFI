@@ -25,14 +25,22 @@ def _extract(archive_path: str, extract_to: str = None) -> None:
     if archive_path.endswith('.zip'):
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
-    elif archive_path.endswith('.tar.gz') or archive_path.endswith('.tgz') or archive_path.endswith('.tar'):
+    elif (
+        archive_path.endswith('.tar.gz')
+        or archive_path.endswith('.tgz')
+        or archive_path.endswith('.tar')
+    ):
         with tarfile.open(archive_path, 'r:*') as tar_ref:
             tar_ref.extractall(extract_to)
     else:
         raise ValueError(f"Unsupported archive format: {archive_path}")
 
 
-def extract_file(archive_path: str, extract_to: str = None, top_folder_name: str = None) -> None:
+def extract_file(
+        archive_path: str,
+        extract_to: str = None,
+        top_folder_name: str = None
+) -> None:
     if not top_folder_name:
         _extract(archive_path, extract_to)
         return
@@ -48,11 +56,15 @@ def extract_file(archive_path: str, extract_to: str = None, top_folder_name: str
     ]
 
     if len(top_folders) != 1:
-        raise ValueError(f"Expected exactly one top folder after unzipping, but found: {top_folders}")
+        raise ValueError("Expected exactly one top folder after unzipping, "
+                         f"but found: {top_folders}")
     top_folder = top_folders[0]
 
     if top_folder != top_folder_name:
-        os.rename(os.path.join(temp_path, top_folder), os.path.join(temp_path, top_folder_name))
+        os.rename(
+            os.path.join(temp_path, top_folder),
+            os.path.join(temp_path, top_folder_name)
+        )
 
     shutil.move(os.path.join(temp_path, top_folder_name), extract_to)
     shutil.rmtree(temp_path)
@@ -79,7 +91,8 @@ def create_symlink(target_path: str, link_path: str) -> None:
             print(f"Removing file {link_abs}...")
             os.remove(link_abs)
         else:
-            raise FileExistsError(f"Default path '{link_abs}' already exists. Please delete it and try again.")
+            raise FileExistsError(f"Default path '{link_abs}' already exists. "
+                                  "Please delete it and try again.")
 
     # Create the symbolic link
     print(f"Creating symbolic link at {link_abs} → {target_abs}...")

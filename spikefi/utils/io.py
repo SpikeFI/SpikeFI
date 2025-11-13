@@ -27,9 +27,16 @@ NET_DIR = os.path.join(OUT_DIR, 'net')
 
 # fname includes file extension
 
-def make_filepath(fname: str, parentdir: str = '', rename: bool = False) -> str:
+def make_filepath(
+        fname: str,
+        parentdir: str = '',
+        rename: bool = False
+) -> str:
     os.makedirs(parentdir, exist_ok=True)
-    return os.path.join(parentdir, rename_if_multiple(fname, parentdir) if rename else fname)
+    return os.path.join(
+        parentdir,
+        rename_if_multiple(fname, parentdir) if rename else fname
+     )
 
 
 def make_out_filepath(fname: str, rename: bool = False) -> str:
@@ -61,7 +68,9 @@ def calculate_trial(fname: str, parentdir: str) -> int:
 
     trial_matches = [re.search(r' \(\d+\)$', f) for f in fnames]
 
-    return max([int(m.group().strip(' ()')) if m else 0 for m in trial_matches]) + 1
+    return max(
+        [int(m.group().strip(' ()')) if m else 0 for m in trial_matches]
+    ) + 1
 
 
 def rename_if_multiple(fname: str, parentdir: str) -> str:

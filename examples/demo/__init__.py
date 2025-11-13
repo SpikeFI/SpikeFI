@@ -1,5 +1,7 @@
-__all__ = ["architectures", "utils", "setup_nmnist", "setup_gesture",
-           "Dataset", "Network"]
+__all__ = [
+    "architectures", "utils", "setup_nmnist", "setup_gesture",
+    "Dataset", "Network"
+]
 
 import os
 import torch
@@ -34,13 +36,21 @@ def is_demo_ready():
     return _is_ready
 
 
-def prepare(casestudy: str, dropout: bool = False, fyamlname=None, batchsize=None, shuffle=None):
-    global case_study, dropout_en, fyaml_name, batch_size, to_shuffle, shape_in, _is_ready
+def prepare(
+        casestudy: str,
+        dropout: bool = False,
+        fyamlname=None,
+        batchsize=None,
+        shuffle=None
+):
+    global case_study, dropout_en, fyaml_name, batch_size
+    global to_shuffle, shape_in, _is_ready
     global Dataset, Network
     global net_params
 
     if casestudy not in SUPPORTED_CASE_STUDIES:
-        raise ValueError(f"Case study '{case_study}' not added. Please modify file 'examples/demo/__init__.py' accordingly.")
+        raise ValueError(f"Case study '{case_study}' not added. "
+                         "Please modify file 'examples/demo/__init__.py'.")
 
     case_study = casestudy
     dropout_en = dropout
@@ -81,14 +91,21 @@ def get_net(fpath: str = None, trial: int = None) -> 'Network':
 
 def get_dataset(train: bool) -> 'Dataset':
     return Dataset(
-        root_dir=os.path.join(WORK_DIR, net_params['training']['path']['root_dir']),
+        root_dir=os.path.join(
+            WORK_DIR, net_params['training']['path']['root_dir']
+        ),
         split='Train' if train else 'Test',
         sampling_time=net_params['simulation']['Ts'],
         sample_length=net_params['simulation']['tSample'])
 
 
 def get_loader(train: bool) -> DataLoader:
-    return DataLoader(dataset=get_dataset(train), batch_size=batch_size, shuffle=to_shuffle, num_workers=4)
+    return DataLoader(
+        dataset=get_dataset(train),
+        batch_size=batch_size,
+        shuffle=to_shuffle,
+        num_workers=4
+    )
 
 
 def get_tiny_loader(size: int = 1) -> DataLoader:
@@ -97,11 +114,17 @@ def get_tiny_loader(size: int = 1) -> DataLoader:
     fields = list(zip(*batches))
     tensors = [torch.cat(field, dim=0) for field in fields]
 
-    return DataLoader(TensorDataset(*tensors), batch_size=batch_size, shuffle=False)
+    return DataLoader(
+        TensorDataset(*tensors),
+        batch_size=batch_size,
+        shuffle=False
+    )
 
 
 def get_base_fname(train: bool = False) -> str:
-    return f"{case_study}{'-do' if dropout_en else ''}{'_train' if train else ''}"
+    return (
+        f"{case_study}{'-do' if dropout_en else ''}{'_train' if train else ''}"
+    )
 
 
 def get_trial() -> int:

@@ -52,13 +52,28 @@ class LayersInfo:
         return len(self.order)
 
     def __repr__(self) -> str:
-        s = f"Layers info ({len(self.names)} in {len(self.order)} levels): {{\n"
-        for lay_idx, lay_name in enumerate(self.order):
-            neu = "{:2d} x {:2d} x {:2d}".format(*self.shapes_neu[lay_name])
-            syn = "{:2d} x {:2d} x {:2d} x {:2d}".format(*self.shapes_syn[lay_name]) if self.weightables[lay_name] else "-"
+        s = (
+            "Layers info "
+            + f"({len(self.names)} in {len(self.order)} levels): {{\n"
+        )
 
-            s += f"      #{lay_idx:2d}: '{lay_name}' - {self.types[lay_name].__name__} - {'' if self.injectables[lay_name] else 'non '}injectable\n"
-            s += f"        Shapes: neurons {neu} | synapses {syn}\n"
+        for lay_idx, lay_name in enumerate(self.order):
+            neu = (
+                "{:2d} x {:2d} x {:2d}"
+                .format(*self.shapes_neu[lay_name])
+            )
+            syn = (
+                "{:2d} x {:2d} x {:2d} x {:2d}"
+                .format(*self.shapes_syn[lay_name])
+                if self.weightables[lay_name] else "-"
+            )
+
+            s += (
+                f"      #{lay_idx:2d}: '{lay_name}' - "
+                + f"{self.types[lay_name].__name__} - "
+                + f"{'' if self.injectables[lay_name] else 'non '}injectable\n"
+                + f"        Shapes: neurons {neu} | synapses {syn}\n"
+            )
         s += '}'
 
         return s
@@ -71,15 +86,21 @@ class LayersInfo:
 
     def infer(self, name: str, layer: nn.Module, output: Tensor) -> None:
         if not LayersInfo.is_module_supported(layer):
-            print('Attention: Unsupported layer type ' + type(layer) + ' found. Potential invalidity of results.')
+            print(
+                f"Attention: unsupported layer type {type(layer)} found. "
+                "Potential invalidity of results."
+            )
             return
 
         is_injectable = LayersInfo.is_module_injectable(layer)
         if is_injectable and name in self.names:
-            print('Cannot use an injectable layer more than once in the network.')
+            print(
+                'Cannot use an injectable layer more than once in the network.'
+            )
             return
 
-        has_weigth = hasattr(layer, 'weight')  # isinstance(layer, (nn.Conv3d, nn.ConvTranspose3d))
+        # isinstance(layer, (nn.Conv3d, nn.ConvTranspose3d))
+        has_weigth = hasattr(layer, 'weight')
 
         self.names.add(name)
         self.order.append(name)
@@ -87,7 +108,9 @@ class LayersInfo:
         self.injectables[name] = is_injectable
         self.weightables[name] = has_weigth
         self.shapes_neu[name] = tuple(output.shape[1:4])
-        self.shapes_syn[name] = tuple(layer.weight.shape[0:4]) if has_weigth else None
+        self.shapes_syn[name] = (
+            tuple(layer.weight.shape[0:4]) if has_weigth else None
+        )
 
     def index(self, name: str) -> int:
         return self.order.index(name)
@@ -100,19 +123,28 @@ class LayersInfo:
         return self.order[idx + 1] if idx < len(self) - 1 else None
 
     def get_random_inj(self, syn_select: bool) -> str:
-        return random.choices(self.get_injectables(), weights=self.get_sizes_inj(syn_select), k=1)[0]
+        return random.choices(
+            self.get_injectables(),
+            weights=self.get_sizes_inj(syn_select), k=1
+        )[0]
 
     def get_shape(self, syn_select: bool, name: str) -> tuple[int, ...]:
         return self.shapes_syn[name] if syn_select else self.shapes_neu[name]
 
     def get_shapes_inj(self, syn_select: bool) -> list[tuple[int, ...]]:
-        return [self.get_shape(syn_select, inj) for inj in self.get_injectables()]
+        return [
+            self.get_shape(syn_select, inj)
+            for inj in self.get_injectables()
+        ]
 
     def get_size(self, syn_select: bool, name: str) -> int:
         return prod(self.get_shape(syn_select, name))
 
     def get_sizes_inj(self, syn_select: bool) -> list[int]:
-        return [prod(shape) for shape in self.get_shapes_inj(syn_select)]
+        return [
+            prod(shape)
+            for shape in self.get_shapes_inj(syn_select)
+        ]
 
     def is_injectable(self, name: str) -> bool:
         return self.injectables.get(name, False)
@@ -123,7 +155,10 @@ class LayersInfo:
     def is_output(self, name: str) -> bool:
         return name == self.order[-1]
 
-    def infer_hook_wrapper(self, layer_name: str) -> Callable[[nn.Module, tuple[Any, ...], Tensor], None]:
+    def infer_hook_wrapper(
+            self,
+            layer_name: str
+    ) -> Callable[[nn.Module, tuple[Any, ...], Tensor], None]:
         def infer_hook(layer: nn.Module, _, output: Tensor) -> None:
             self.infer(layer_name, layer, output)
 

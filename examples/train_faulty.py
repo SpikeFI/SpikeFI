@@ -23,11 +23,13 @@ import demo
 
 
 # Configuration parameters for the optimizations example
-# Select one or more layers to target (use an empty string '' to target the whole network)
+# Select one or more layers to target
+# (use an empty string '' to target the whole network)
 layers = []
 # Select the number of training epochs
 n_epochs = 20
-# Select the percentage(s) of faults to inject across the selected layers before training
+# Select the percentage(s) of faults to inject
+# across the selected layers before training
 percent = range(10, 31, 10)
 # Learning rate
 learn_r = 1e-3
@@ -46,18 +48,24 @@ def get_range_str(r: range):
 # Selects the case study, e.g., the LeNet network without dropout
 demo.prepare(casestudy='nmnist-lenet', dropout=False)
 
-# Create a network instance (or load a trained one to perform re-training with faults)
+# Create a network instance
+# (or load a trained one to perform re-training with faults)
 net = demo.Network(demo.net_params, demo.dropout_en).to(demo.device)
 
 # Initialize the campaign object
 fm_name = f_model.get_name_snake_case(delimiter='-')
-cmpn_name = f"{demo.get_base_fname(train=True)}_{fm_name}_c{get_range_str(percent)}"
+cmpn_name = (
+    f"{demo.get_base_fname(train=True)}_{fm_name}_c{get_range_str(percent)}"
+)
 cmpn = sfi.Campaign(net, demo.shape_in, net.slayer, cmpn_name)
 
 # If specific layers are selected...
 if bool(layers) and all(layers):
     lay_inj = layers
-    l_sizes = [cmpn.layers_info.get_size(f_model.is_synaptic(), l_name) for l_name in layers]
+    l_sizes = [
+        cmpn.layers_info.get_size(f_model.is_synaptic(), l_name)
+        for l_name in layers
+    ]
 else:  # If the entire network is selected...
     # Exclude the output layer from the FI experiments
     lay_inj = cmpn.layers_info.get_injectables()[:-1]
@@ -66,13 +74,19 @@ else:  # If the entire network is selected...
 # Each fault round will result to a new trained network instance
 for r, c in enumerate(percent):
     # Inject faults randomly across the targeted layers
-    cmpn.then_inject([Fault.multiple_random_percent(f_model, c / 100., lay_inj, l_sizes)])
+    cmpn.then_inject(
+        Fault.multiple_random_percent(f_model, c / 100., lay_inj, l_sizes)
+    )
 cmpn.rounds.pop(0)
 
-# Execute the FI experiments (train a new network instance for each fault round)
-faulties = cmpn.run_train(n_epochs, demo.get_loader(train=True),
-                          optimizer=torch.optim.Adam(net.parameters(), lr=learn_r, amsgrad=True),
-                          spike_loss=snn.loss(demo.net_params).to(demo.device))
+# Execute the FI experiments
+# (train a new network instance for each fault round)
+faulties = cmpn.run_train(
+    n_epochs,
+    demo.get_loader(train=True),
+    optimizer=torch.optim.Adam(net.parameters(), lr=learn_r, amsgrad=True),
+    spike_loss=snn.loss(demo.net_params).to(demo.device)
+)
 
 # Save trained networks
 for faulty in faulties:

@@ -41,8 +41,14 @@ optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, amsgrad=True)
 cmpn_name = f"{demo.get_base_fname(train=True)}_golden"
 cmpn = sfi.Campaign(net, demo.shape_in, net.slayer, cmpn_name)
 
-# Execute the FI experiments (train a new network instance for each fault round)
-golden = cmpn.run_train(n_epochs, demo.get_loader(train=True), optimizer, spike_loss)[0]
+# Execute the FI experiments
+# (train a new network instance for each fault round)
+golden = cmpn.run_train(
+    n_epochs,
+    demo.get_loader(train=True),
+    optimizer,
+    spike_loss
+)[0]
 
 # Save trained network
 cmpn.save_net(golden, demo.get_fnetname(trial).split('.')[0])

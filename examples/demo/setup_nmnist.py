@@ -9,11 +9,16 @@ def main():
 
     parser = argparse.ArgumentParser(description="Setup and organize datasets")
     parser.add_argument("--force", action="store_true",
-                        help="Force reinstallation of datasets (delete existing installation)")
+                        help="Force reinstallation of datasets "
+                        "(delete existing installation)"
+                        )
     parser.add_argument("--dir", default=default_datasets_path,
-                        help="Base directory to store dataset files")
+                        help="Base directory to store dataset files"
+                        )
     parser.add_argument("--archive", required=False,
-                        help="The path to the zip file containing the dataset files.")
+                        help="The path to the zip file "
+                        "containing the dataset files."
+                        )
     args = parser.parse_args()
 
     if not args.force and nmnist.check(default_datasets_path):

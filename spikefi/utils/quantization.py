@@ -33,7 +33,12 @@ def qiinfo(dtype: torch.dtype) -> torch.iinfo:
     return torch.iinfo(dtype)
 
 
-def qargs_exact(xmin: float, xmax: float, qmin: int, qmax: int) -> tuple[float, int]:
+def qargs_exact(
+        xmin: float,
+        xmax: float,
+        qmin: int,
+        qmax: int
+) -> tuple[float, int]:
     assert xmin != xmax, "Min and max values cannot be equal"
 
     scale = (xmax - xmin) / (qmax - qmin)
@@ -42,11 +47,19 @@ def qargs_exact(xmin: float, xmax: float, qmin: int, qmax: int) -> tuple[float, 
     return scale, zero_point
 
 
-def qargs_precision(xmin: float, xmax: float, p: int) -> tuple[float, int]:
+def qargs_precision(
+        xmin: float,
+        xmax: float,
+        p: int
+) -> tuple[float, int]:
     return qargs_exact(xmin, xmax, 0, 2**p - 1)
 
 
-def qargs_from_range(xmin: float, xmax: float, dtype: torch.dtype) -> tuple[float, int]:
+def qargs_from_range(
+        xmin: float,
+        xmax: float,
+        dtype: torch.dtype
+) -> tuple[float, int]:
     info = qiinfo(dtype)
     qmin = info.min
     qmax = info.max
@@ -56,5 +69,8 @@ def qargs_from_range(xmin: float, xmax: float, dtype: torch.dtype) -> tuple[floa
     return scale, zero_point
 
 
-def qargs_from_tensor(x: Tensor, dtype: torch.dtype) -> tuple[float, int]:
+def qargs_from_tensor(
+        x: Tensor,
+        dtype: torch.dtype
+) -> tuple[float, int]:
     return qargs_from_range(x.min().item(), x.max().item(), dtype)

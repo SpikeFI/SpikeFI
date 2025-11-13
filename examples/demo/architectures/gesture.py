@@ -4,7 +4,14 @@ import slayerSNN as snn
 
 
 class GestureDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir: str, split: str, sampling_time: int, sample_length: int, transform=None):
+    def __init__(
+            self,
+            root_dir: str,
+            split: str,
+            sampling_time: int,
+            sample_length: int,
+            transform=None
+    ):
         super().__init__()
 
         self.root_dir = root_dir
@@ -31,8 +38,12 @@ class GestureDataset(torch.utils.data.Dataset):
         fpath = self.samples[idx]
         label = self.labels[idx]
 
-        spikes_in = snn.io.readNpSpikes(fpath) \
-            .toSpikeTensor(torch.zeros((2, 128, 128, self.n_time_bins)), self.sampling_time)
+        spikes_in = snn.io.readNpSpikes(
+            fpath
+        ).toSpikeTensor(
+            torch.zeros((2, 128, 128, self.n_time_bins)),
+            self.sampling_time
+        )
 
         target = torch.zeros((11, 1, 1, 1))
         target[label, ...] = 1

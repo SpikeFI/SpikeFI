@@ -58,7 +58,9 @@ for epoch in range(n_epochs):
         output = net.forward(input)
 
         # Gather the training stats
-        stats.training.correctSamples += torch.sum(snn.predict.getClass(output) == label).data.item()
+        stats.training.correctSamples += torch.sum(
+            snn.predict.getClass(output) == label
+        ).data.item()
         stats.training.numSamples += len(label)
 
         # Calculate loss
@@ -79,14 +81,17 @@ for epoch in range(n_epochs):
         stats.print(epoch, i, (datetime.now() - tSt).total_seconds())
 
     # Testing loop
-    # Same steps as in training loop except loss backpropagation and weight update
+    # Same steps as in training loop except loss
+    # backpropagation and weight update
     for i, (_, input, target, label) in enumerate(test_loader, 0):
         input = input.to(demo.device)
         target = target.to(demo.device)
 
         output = net.forward(input)
 
-        stats.testing.correctSamples += torch.sum(snn.predict.getClass(output) == label).data.item()
+        stats.testing.correctSamples += torch.sum(
+            snn.predict.getClass(output) == label
+        ).data.item()
         stats.testing.numSamples += len(label)
 
         loss = spike_loss.numSpikes(output, target)
@@ -98,16 +103,27 @@ for epoch in range(n_epochs):
 
     # Save the trained network instance with the best testing accuracy
     if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
-        torch.save(net.state_dict(), sfio.make_net_filepath(demo.get_fnetname(trial)))
+        torch.save(
+            net.state_dict(),
+            sfio.make_net_filepath(demo.get_fnetname(trial))
+        )
 
 # Save stats in a pickle file
-with open(sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb') as stats_file:
+with open(
+    sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb'
+)as stats_file:
     pickle.dump(stats, stats_file)
 
 # Plot the training results (learning curves) and save in a .png file
 plt.figure()
-plt.plot(range(1, n_epochs + 1), torch.Tensor(stats.training.accuracyLog) * 100., 'b--', label='Training')
-plt.plot(range(1, n_epochs + 1), torch.Tensor(stats.testing.accuracyLog) * 100., 'g-', label='Testing')
+plt.plot(
+    range(1, n_epochs + 1),
+    torch.Tensor(stats.training.accuracyLog) * 100., 'b--', label='Training'
+)
+plt.plot(
+    range(1, n_epochs + 1),
+    torch.Tensor(stats.testing.accuracyLog) * 100., 'g-', label='Testing'
+)
 plt.xlabel('Epoch #')
 plt.ylabel('Accuracy (%)')
 plt.legend(loc='lower right')

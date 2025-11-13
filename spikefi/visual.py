@@ -36,15 +36,29 @@ from spikefi.utils.io import make_fig_filepath
 
 
 CMAP = 'jet'
-CPAL = ["#02580E", "#9C7720", "#104280", "#B7312C", "#DC996C", "#5F1B08", "#FFD19E"]
+CPAL = [
+    "#02580E", "#9C7720", "#104280", "#B7312C", "#DC996C", "#5F1B08", "#FFD19E"
+]
 
 
-def _data_mapping(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
-                  fault_model: sff.FaultModel = None) -> dict[tuple[str, sff.FaultModel], dict[int, list[int]]]:
+def _data_mapping(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        layer: str = None,
+        fault_model: sff.FaultModel = None
+) -> dict[tuple[str, sff.FaultModel], dict[int, list[int]]]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
-    data_map: dict[tuple[str, sff.FaultModel], dict[int, list[int]]] = {}   # { (layer, fault model): { campaign index, [round index] } }
+    # structure -> { (layer, fault model): { campaign index, [round index] } }
+    data_map: dict[
+        tuple[
+            str, sff.FaultModel
+        ],
+        dict[
+            int,
+            list[int]
+        ]
+    ] = {}
 
     for cmpn_idx, cmpn_data in enumerate(cmpns_data):
         for lay, r_idxs in cmpn_data.rgroups.items():
@@ -76,8 +90,14 @@ def _heat_reshape(N: int, R: float) -> tuple[int, int]:
     return (a, int(N / a))
 
 
-def _title(cmpns_data: CampaignData | Iterable[CampaignData], data_map: dict,
-           model_friendly: str, plot_type: str, title_suffix: str, format: str) -> str:
+def _title(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        data_map: dict,
+        model_friendly: str,
+        plot_type: str,
+        title_suffix: str,
+        format: str
+) -> str:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -93,7 +113,10 @@ def _title(cmpns_data: CampaignData | Iterable[CampaignData], data_map: dict,
             one_m &= fm == model
 
         if one_m:
-            title_def = "" if model_friendly else f"_{model.get_name()}{int(fm.args[0])}"
+            if model_friendly:
+                title_def = ""
+            else:
+                f"_{model.get_name()}{int(fm.args[0])}"
         else:
             title_def = "_comparative"
 
@@ -104,15 +127,29 @@ def _title(cmpns_data: CampaignData | Iterable[CampaignData], data_map: dict,
 
     cmpn_name = cmpns_data[0].name
     for cmpn_data in cmpns_data:
-        match = SequenceMatcher(None, cmpn_name, cmpn_data.name).find_longest_match()
+        match = SequenceMatcher(
+            None, cmpn_name, cmpn_data.name
+        ).find_longest_match()
         cmpn_name = cmpn_name[match.a:match.a + match.size]
 
-    return f"{cmpn_name.strip('_')}{model_friendly or ''}{title_def}_{plot_type}{title_suffix or ''}.{format.strip('.')}"
+    return (
+        f"{cmpn_name.strip('_')}"
+        + f"{model_friendly or ''}"
+        + f"{title_def}_"
+        + f"{plot_type}"
+        + f"{title_suffix or ''}."
+        + f"{format.strip('.')}"
+    )
 
 
-def bar(cmpns_data: CampaignData | Iterable[CampaignData],
-        model_friendly: str = None, fig_size: tuple[float, float] = None,
-        title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
+def bar(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        model_friendly: str = None,
+        fig_size: tuple[float, float] = None,
+        title_suffix: str = None,
+        format: str = 'svg',
+        to_save: bool = True
+) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -149,8 +186,13 @@ def bar(cmpns_data: CampaignData | Iterable[CampaignData],
 
             bottom += groups_cent[i]
 
-        bar_labels = ax.bar_label(b, labels=[fm.get_name()[:4] + "."], rotation=90,
-                                  color='white', padding=-35)
+        bar_labels = ax.bar_label(
+            b,
+            labels=[fm.get_name()[:4] + "."],
+            rotation=90,
+            color='white',
+            padding=-35
+        )
 
         for bl in bar_labels:
             bl.set_path_effects([
@@ -163,10 +205,25 @@ def bar(cmpns_data: CampaignData | Iterable[CampaignData],
     ax.set_ylabel("Faults (%)")
     ax.set_yticks(range(0, 101, 10))
     ax.set_xlabel('Layers')
-    ax.set_xticks([i + (width / 2 + space / 2) * (offset_mult[lay] - 1) for i, lay in enumerate(layers)], layers)
+    ax.set_xticks(
+        [
+            i + (width / 2 + space / 2) * (offset_mult[lay] - 1)
+            for i, lay in enumerate(layers)
+        ],
+        layers
+    )
 
     if to_save:
-        plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "bar", title_suffix, format))
+        plot_path = make_fig_filepath(
+            _title(
+                cmpns_data,
+                data_map,
+                model_friendly,
+                "bar",
+                title_suffix,
+                format
+            )
+        )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
@@ -179,21 +236,38 @@ def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
     cax = fig.add_axes([.05, .55, .9, .25])
     norm = mpl.colors.Normalize(0, 100)
 
-    cbar = mpl.colorbar.Colorbar(cax, cmap=CMAP, norm=norm, orientation='horizontal', ticks=range(0, 101, 10))
+    cbar = mpl.colorbar.Colorbar(
+        cax,
+        cmap=CMAP,
+        norm=norm,
+        orientation='horizontal',
+        ticks=range(0, 101, 10)
+    )
     cbar.set_ticks(range(0, 100), minor=True)
     plt.xlabel("Classification Accuracy (%)")
 
     if to_save:
-        plot_path = make_fig_filepath(fname="colormap." + format.removeprefix('.'))
+        plot_path = make_fig_filepath(
+            fname="colormap." + format.removeprefix('.')
+        )
         plt.savefig(plot_path, transparent=True)
 
     return fig
 
 
-def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, fault_model: sff.FaultModel = None,
-         preserve_dim: bool = False, ratio: float = 1.0, max_area: int = 512**2, show_axes: bool = True,
-         model_friendly: str = None, fig_size: tuple[float, float] = None,
-         title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
+def heat(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        layer: str = None, fault_model: sff.FaultModel = None,
+        preserve_dim: bool = False,
+        ratio: float = 1.0,
+        max_area: int = 512**2,
+        show_axes: bool = True,
+        model_friendly: str = None,
+        fig_size: tuple[float, float] = None,
+        title_suffix: str = None,
+        format: str = 'svg',
+        to_save: bool = True
+) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -213,7 +287,10 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
         perf = np.array(perf, dtype=np.float32)
 
         if N > max_area:
-            print("Cannot plot heat map for the following layer - fault model pair:")
+            print(
+                "Cannot plot heat map for the following pair "
+                "of layer and fault model:"
+            )
             print((lay, fm))
             print(f"Reason: too many faults (>{max_area}).")
             continue
@@ -235,7 +312,11 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
             else:
                 plot_shape = (shape[1] * shape[2], shape[0])
 
-        if not preserve_dim or plot_shape[0] > sqrt(max_area) or plot_shape[1] > sqrt(max_area):
+        if (
+            not preserve_dim
+            or plot_shape[0] > sqrt(max_area)
+            or plot_shape[1] > sqrt(max_area)
+        ):
             plot_shape = _heat_reshape(N, ratio or 1.0)
 
         fig = plt.figure(str((lay, fm)), figsize=fig_size)
@@ -244,16 +325,30 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
         wx = int(plot_shape[1] / 100.) + 1
         fig.set_size_inches(wx * fig.get_figwidth(), hx * fig.get_figheight())
 
-        pos = plt.imshow(perf.reshape(*plot_shape), cmap=CMAP,
-                         origin='lower', vmin=0., vmax=1., interpolation='nearest',
-                         extent=[0, plot_shape[1], 0, plot_shape[0]])
+        pos = plt.imshow(
+            perf.reshape(*plot_shape),
+            cmap=CMAP,
+            origin='lower',
+            vmin=0.,
+            vmax=1.,
+            interpolation='nearest',
+            extent=[0, plot_shape[1], 0, plot_shape[0]]
+        )
 
-        pos.axes.set_xticks([1] + np.arange(10, plot_shape[1] + 1, 10).tolist())
-        pos.axes.set_xticklabels([1] + np.arange(10, plot_shape[1] + 1, 10).tolist())
+        pos.axes.set_xticks(
+            [1] + np.arange(10, plot_shape[1] + 1, 10).tolist()
+        )
+        pos.axes.set_xticklabels(
+            [1] + np.arange(10, plot_shape[1] + 1, 10).tolist()
+        )
         pos.axes.set_xticks(np.arange(1, plot_shape[1]), minor=True)
 
-        pos.axes.set_yticks([1] + np.arange(10, plot_shape[0] + 1, 10).tolist())
-        pos.axes.set_yticklabels([1] + np.arange(10, plot_shape[0] + 1, 10).tolist())
+        pos.axes.set_yticks(
+            [1] + np.arange(10, plot_shape[0] + 1, 10).tolist()
+        )
+        pos.axes.set_yticklabels(
+            [1] + np.arange(10, plot_shape[0] + 1, 10).tolist()
+        )
         pos.axes.set_yticks(np.arange(1, plot_shape[0]), minor=True)
 
         pos.axes.tick_params(axis='both', which='both', length=0)
@@ -264,7 +359,15 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
             pos.axes.set_yticklabels([])
 
         if to_save:
-            plot_path = make_fig_filepath(_title(local_cmpns_data, {(lay, fm): cmpn_dict}, model_friendly, "heat", title_suffix, format))
+            plot_path = make_fig_filepath(
+                _title(
+                    local_cmpns_data,
+                    {(lay, fm): cmpn_dict},
+                    model_friendly, "heat",
+                    title_suffix,
+                    format
+                )
+            )
             plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
         figs.append(fig)
@@ -272,15 +375,27 @@ def heat(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None, f
     return figs
 
 
-def plot(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
-         legend_loc: str = "lower right", xlabel: str = '',
-         model_friendly: str = None, fig_size: tuple[float, float] = None,
-         title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
+def plot(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        layer: str = None,
+        legend_loc: str = "lower right",
+        xlabel: str = '',
+        model_friendly: str = None,
+        fig_size: tuple[float, float] = None,
+        title_suffix: str = None,
+        format: str = 'svg',
+        to_save: bool = True
+) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
     data_map = _data_mapping(cmpns_data, layer)
-    data_map_sorted = dict(sorted(data_map.items(), key=lambda item: item[0][0]))
+    data_map_sorted = dict(
+        sorted(
+            data_map.items(),
+            key=lambda item: item[0][0]
+        )
+    )
     curves: dict[str, list[tuple[float, np.array[float]]]] = {}
 
     for (lay, fm), cmpn_dict in data_map_sorted.items():
@@ -327,18 +442,38 @@ def plot(cmpns_data: CampaignData | Iterable[CampaignData], layer: str = None,
     plt.legend(loc=legend_loc)
 
     if to_save:
-        plot_path = make_fig_filepath(_title(cmpns_data, data_map, model_friendly, "scatter", title_suffix, format))
+        plot_path = make_fig_filepath(
+            _title(
+                cmpns_data,
+                data_map,
+                model_friendly,
+                "scatter",
+                title_suffix,
+                format
+            )
+        )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
-def plot_train(cmpns_data: CampaignData | Iterable[CampaignData], x_range: range, fig_size: tuple[float, float] = None,
-               title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> Figure:
+def plot_train(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        x_range: range,
+        fig_size: tuple[float, float] = None,
+        title_suffix: str = None,
+        format: str = 'svg',
+        to_save: bool = True
+) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
-    accu = [[perf.training.maxAccuracy for perf in cmpn_data.performance] for cmpn_data in cmpns_data]
+    accu = [
+        [
+            perf.training.maxAccuracy
+            for perf in cmpn_data.performance
+        ] for cmpn_data in cmpns_data
+    ]
     mean_accu = np.array(accu).mean(axis=0)
 
     x_slice = slice(None) if x_range[0] else slice(1, None, None)
@@ -347,7 +482,14 @@ def plot_train(cmpns_data: CampaignData | Iterable[CampaignData], x_range: range
     _earth_palette()
     if not x_range[0]:
         plt.axhline(y=mean_accu[0] * 100., label='Golden', color=CPAL[1])
-    plt.plot(x_range[x_slice], mean_accu[x_slice] * 100., marker='d', linestyle='-', linewidth=0.7, label='Faulty')
+    plt.plot(
+        x_range[x_slice],
+        mean_accu[x_slice] * 100.,
+        marker='d',
+        linestyle='-',
+        linewidth=0.7,
+        label='Faulty'
+    )
     plt.gca().yaxis.set_minor_locator(MultipleLocator(10))
     plt.ylim([60, 100])
     plt.xlim([x_range[x_slice][0], x_range[-1]])
@@ -360,14 +502,21 @@ def plot_train(cmpns_data: CampaignData | Iterable[CampaignData], x_range: range
             title_suffix = "_" + title_suffix.strip('_')
         common_name = re.sub(r'(_net)\d+', r'\1', cmpns_data[0].name)
 
-        plot_path = make_fig_filepath(f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}")
+        plot_path = make_fig_filepath(
+            f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}"
+        )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
-def learning_curve(cmpns_data: CampaignData | Iterable[CampaignData], fig_size: tuple[float, float] = None,
-                   title_suffix: str = None, format: str = 'svg', to_save: bool = True) -> list[Figure]:
+def learning_curve(
+        cmpns_data: CampaignData | Iterable[CampaignData],
+        fig_size: tuple[float, float] = None,
+        title_suffix: str = None,
+        format: str = 'svg',
+        to_save: bool = True
+) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
 
@@ -379,11 +528,17 @@ def learning_curve(cmpns_data: CampaignData | Iterable[CampaignData], fig_size: 
         for r, perf in enumerate(cmpn_data.performance):
             epochs = len(perf.training.accuracyLog)
 
-            plt.plot(range(1, epochs + 1), torch.Tensor(perf.training.accuracyLog) * 100.,
-                     label='Training' + (f' (round {r})' if n_rounds > 1 else ''))
+            plt.plot(
+                range(1, epochs + 1),
+                torch.Tensor(perf.training.accuracyLog) * 100.,
+                label='Training' + (f' (round {r})' if n_rounds > 1 else '')
+            )
             if all(accu for accu in perf.testing.accuracyLog):
-                plt.plot(range(1, epochs + 1), torch.Tensor(perf.testing.accuracyLog) * 100.,
-                         label='Testing' + (f' (round {r})' if n_rounds > 1 else ''))
+                plt.plot(
+                    range(1, epochs + 1),
+                    torch.Tensor(perf.testing.accuracyLog) * 100.,
+                    label='Testing' + (f' (round {r})' if n_rounds > 1 else '')
+                )
 
             plt.legend()
             plt.xlabel('Epoch')
@@ -398,7 +553,10 @@ def learning_curve(cmpns_data: CampaignData | Iterable[CampaignData], fig_size: 
                 if title_suffix:
                     title_suffix = "_" + title_suffix.strip('_')
 
-                plot_path = make_fig_filepath(f"{cmpn_data.name}_learning{title_suffix or ''}.{format.strip('.')}")
+                plot_path = make_fig_filepath(
+                    f"{cmpn_data.name}_learning{title_suffix or ''}."
+                    + f"{format.strip('.')}"
+                )
                 plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
         figs.append(fig)

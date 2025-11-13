@@ -24,7 +24,12 @@ from tqdm import tqdm
 
 
 class CampaignProgress:
-    def __init__(self, batches_num: int, rounds_num: int, epochs_num: int = None) -> None:
+    def __init__(
+            self,
+            batches_num: int,
+            rounds_num: int,
+            epochs_num: int = None
+    ) -> None:
         self.is_training = bool(epochs_num)
         self.loss = 0.
         self.accu = 0.
@@ -58,16 +63,34 @@ class CampaignProgress:
         self._lock = Lock()
 
     def __str__(self) -> str:
-        s_status = "Status: " + (("running " + next(self._loading_bar)) if not self.has_finished() else "done") + "\n"
-        s_header = "|   Batch #   |   Round #   |  Total time  |  Progress  |\n"
+        s_status = (
+            "Status: "
+            + (
+                ("running " + next(self._loading_bar))
+                if not self.has_finished() else "done"
+            ) + "\n"
+        )
+
+        s_header = (
+            "|   Batch #   "
+            "|   Round #   "
+            "|  Total time  "
+            "|  Progress  |\n"
+        )
 
         with self._lock:
             if self.is_training:
-                s_header = "|    Loss    |  Accuracy  |   Epoch #   " + s_header
+                s_header = (
+                    "|    Loss    "
+                    "|  Accuracy  "
+                    "|   Epoch #   "
+                ) + s_header
                 s_border = re.sub(r'[^+\n]', '-', s_header.replace('|', '+'))
-                s = s_status + s_border + s_header
 
-                s += f"|  {self.loss:7.3f}   |  {self.accu * 100.:6.3f} %  |  {self.epoch:4d}/{self.epoch_num:<4d}  "
+                s = s_status + s_border + s_header
+                s += f"|  {self.loss:7.3f}   |"
+                s += f"  {self.accu * 100.:6.3f} %  |"
+                s += f"  {self.epoch:4d}/{self.epoch_num:<4d}  "
             else:
                 s_border = re.sub(r'[^+\n]', '-', s_header.replace('|', '+'))
                 s = s_status + s_border + s_header
@@ -85,7 +108,10 @@ class CampaignProgress:
 
     def has_finished(self) -> bool:
         with self._lock:
-            return self.end_time != 0. or math.isclose(self.status, 1, abs_tol=1e-12)
+            return (
+                self.end_time != 0.
+                or math.isclose(self.status, 1, abs_tol=1e-12)
+            )
 
     def get_duration_sec(self) -> float | None:
         if self.has_finished():
@@ -152,7 +178,11 @@ class CampaignProgress:
                 self.end_time = 0.
 
 
-def refresh_progress_job(progress: CampaignProgress, interval: float = 0.1, mode: str = '') -> None:
+def refresh_progress_job(
+        progress: CampaignProgress,
+        interval: float = 0.1,
+        mode: str = ''
+) -> None:
     while not progress.has_finished():
         progress.show(mode)
         sleep(interval)

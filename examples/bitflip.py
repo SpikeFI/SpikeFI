@@ -29,7 +29,8 @@ import demo
 
 
 # Configuration parameters for the bitflip FI experiments
-# Select one or more layers to target (use an empty string '' to target the whole network)
+# Select one or more layers to target
+# (use an empty string '' to target the whole network)
 layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
 # Select the bit positions to target
 bits = range(8)     # LSB is bit 0
@@ -51,32 +52,47 @@ cmpns_count = 0
 
 # For each targeted layer
 for lay_name in layers:
-    # Find scale and zero point for the quantization of the synaptic weights of the layer
+    # Find scale and zero point for the quantization
+    # of the synaptic weights of the layer
     W = getattr(net, lay_name).weight
     scale, zero_point = qargs_from_tensor(W, qdtype)
 
     # For each targeted bit position
     for b in bits:
         # Create a SpikeFI Campaign with a descriptive name
-        cmpn_name = demo.get_fnetname().removesuffix('.pt') + f"_synapse_bitflip_{lay_name or 'ALL'}_b{b}"
+        cmpn_name = (
+            demo.get_fnetname().removesuffix('.pt')
+            + f"_synapse_bitflip_{lay_name or 'ALL'}_b{b}"
+        )
         cmpn = sfi.Campaign(net, demo.shape_in, net.slayer, name=cmpn_name)
         cmpns_count += 1
 
-        # Inject bitflipped synapse faults across 250^2 randomly selected synaptic weights in the layer
+        # Inject bitflipped synapse faults across 250^2
+        # randomly selected synaptic weights in the layer
         # Creates a separate fault round containing a single fault each
-        cmpn.inject_complete(sfi.fm.BitflippedSynapse(b, scale, zero_point, qdtype),
-                             lay_name, fault_sampling_k=250**2)
+        cmpn.inject_complete(
+            sfi.fm.BitflippedSynapse(b, scale, zero_point, qdtype),
+            lay_name,
+            fault_sampling_k=250**2
+        )
 
         # Print status information
         print(f"Campaign {cmpns_count}/{cmpns_total}: '{cmpn.name}'")
 
         # Execute FI experiments for current targeted layer and bit position
-        cmpn.run(test_loader, spike_loss=snn.loss(demo.net_params).to(cmpn.device))
+        cmpn.run(
+            test_loader,
+            spike_loss=snn.loss(demo.net_params).to(cmpn.device)
+        )
 
         # Visualize results with a heat map
         # The 'fig' object can be stored in a pickle file for later use/edit
         preserve_dim = 'nmnist' in demo.case_study
-        fig = sfi.visual.heat(cmpn.export(), preserve_dim=preserve_dim, format='png')
+        fig = sfi.visual.heat(
+            cmpn.export(),
+            preserve_dim=preserve_dim,
+            format='png'
+        )
 
         # Save results in a pkl file
         cmpn.save()

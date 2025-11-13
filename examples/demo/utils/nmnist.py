@@ -3,8 +3,13 @@ import shutil
 from demo.utils.data import download_file, extract_file, create_symlink
 
 
-def organize(datasets_path: str, default_path: str, zip_path: str = None) -> None:
-    url = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/468j46mzdv-1.zip"
+def organize(
+        datasets_path: str,
+        default_path: str,
+        zip_path: str = None
+) -> None:
+    url = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com"
+    "/468j46mzdv-1.zip"
     nmnist_path = os.path.join(datasets_path, 'N-MNIST')
 
     if os.path.exists(nmnist_path):

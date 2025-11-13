@@ -1,1 +1,3 @@
-__all__ = ["data", "gesture", "nmnist"]
+__all__ = [
+    "data", "gesture", "nmnist"
+]

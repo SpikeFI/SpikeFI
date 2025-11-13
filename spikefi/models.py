@@ -35,16 +35,29 @@ def set_value(_, value: float | Tensor) -> float | Tensor:
     return value
 
 
-def add_value(original: float | Tensor, value: float | Tensor) -> float | Tensor:
+def add_value(
+        original: float | Tensor,
+        value: float | Tensor
+) -> float | Tensor:
     return original + value
 
 
-def mul_value(original: float | Tensor, value: float | Tensor) -> float | Tensor:
+def mul_value(
+        original: float | Tensor,
+        value: float | Tensor
+) -> float | Tensor:
     return original * value
 
 
-def qua_value(original: Tensor, scale: float, zero_point: int, dtype: torch.dtype) -> Tensor:
-    return torch.dequantize(torch.quantize_per_tensor(original, scale, zero_point, dtype))
+def qua_value(
+        original: Tensor,
+        scale: float,
+        zero_point: int,
+        dtype: torch.dtype
+) -> Tensor:
+    return torch.dequantize(
+        torch.quantize_per_tensor(original, scale, zero_point, dtype)
+    )
 
 
 # LSB: bit 0
@@ -54,7 +67,9 @@ def bfl_value(original: Tensor, bit: int | Iterable[int] | Tensor,
               scale: float, zero_point: int, dtype: torch.dtype) -> Tensor:
     if isinstance(bit, int):
         bit = [bit]
-    assert all(0 <= b < qiinfo(dtype).bits for b in bit), 'Invalid bit position(s) to flip'
+    assert all(0 <= b < qiinfo(dtype).bits for b in bit), (
+        'Invalid bit position(s) to flip'
+    )
 
     bfl_mask = 0
     for b in bit:
@@ -70,7 +85,12 @@ def bfl_value(original: Tensor, bit: int | Iterable[int] | Tensor,
 
 # Mother class for parametric faults
 class ParametricNeuronFaultModel(FaultModel):
-    def __init__(self, param_name: str, param_method: Callable[..., float | Tensor], *param_args) -> None:
+    def __init__(
+            self,
+            param_name: str,
+            param_method: Callable[..., float | Tensor],
+            *param_args
+    ) -> None:
         super().__init__(FaultTarget.PARAMETER, set_value, tuple())
         self.method.__name__ = 'set_value'
 
@@ -83,28 +103,44 @@ class ParametricNeuronFaultModel(FaultModel):
         self.flayer = None
 
     def __repr__(self) -> str:
-        return super().__repr__() + "\n" \
-            + f"  - Parameter Name: '{self.param_name}'\n" \
-            + f"  - Parameter Method: {self.param_method.__name__}\n" \
+        return (
+            super().__repr__() + "\n"
+            + f"  - Parameter Name: '{self.param_name}'\n"
+            + f"  - Parameter Method: {self.param_method.__name__}\n"
             + f"  - Parameter Arguments: {self.param_args}"
+        )
 
     def __str__(self) -> str:
-        return super().__str__() + f" | Parametric: '{self.param_name}', {self.param_method.__name__}"
+        return (
+            super().__str__()
+            + f" | Parametric: '{self.param_name}',"
+            + f" {self.param_method.__name__}"
+        )
 
     def _key(self) -> tuple:
-        return self.target, self.method, self.param_name, self.param_method, self.param_args
+        return (
+            self.target,
+            self.method,
+            self.param_name,
+            self.param_method,
+            self.param_args
+        )
 
     def is_param_perturbed(self) -> bool:
         return self.flayer is not None
 
     def param_perturb(self, slayer: spikeLayer, device: torch.device) -> None:
         self.param_original = slayer.neuron[self.param_name]
-        self.param_perturbed = self.param_method(self.param_original, *self.param_args)
+        self.param_perturbed = self.param_method(
+            self.param_original, *self.param_args
+        )
 
         dummy = deepcopy(slayer)
         dummy.neuron[self.param_name] = self.param_perturbed
 
-        self.flayer = spikeLayer(dummy.neuron, dummy.simulation, fullRefKernel=True).to(device)
+        self.flayer = spikeLayer(
+            dummy.neuron, dummy.simulation, fullRefKernel=True
+        ).to(device)
 
     def param_restore(self) -> None:
         self.flayer.neuron[self.param_name] = self.param_original
@@ -137,7 +173,11 @@ class RandomFaultModel:
 
         # Distribute remaining weight equally among None weights
         remaining_weight = 1.0 - total_weight
-        inferred_weight = remaining_weight / none_count if none_count > 0 else 0.0
+        inferred_weight = (
+            remaining_weight / none_count
+            if none_count > 0
+            else 0.0
+        )
 
         weights = [
             c.select_chance if c.select_chance is not None else inferred_weight
@@ -167,7 +207,9 @@ class SaturatedNeuron(FaultModel):
 class StuckNeuron(FaultModel):
     def __init__(self, x: float = None):
         _x = x if x is not None else random.uniform(0, 1)
-        assert _x >= 0.0 and _x <= 1.0, 'Stuck-at value x needs to be in the range [0, 1]'
+        assert _x >= 0.0 and _x <= 1.0, (
+            'Stuck-at value x needs to be in the range [0, 1]'
+        )
         super().__init__(FaultTarget.OUTPUT, set_value, _x)
 
 
@@ -178,13 +220,20 @@ class RandomNeuron(RandomFaultModel):
         RandomModelChoice(StuckNeuron, select_chance=1 / 6)
     ]
 
-    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
+    def __new__(
+            cls,
+            model_choices: Optional[list[RandomModelChoice]] = None
+    ) -> FaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 
 class ParametricNeuron(ParametricNeuronFaultModel):
     def __init__(self, param_name: str, percentage: float = None) -> None:
-        rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
+        rho = (
+            percentage
+            if percentage is not None
+            else random.uniform(0.1, 3.0)
+        )
         super().__init__(param_name, mul_value, rho)
 
 
@@ -205,10 +254,16 @@ class ThresholdFaultNeuron(ParametricNeuron):
 
 class RandomParametricNeuron(RandomFaultModel):
     DEF_MODEL_CHOICES = [
-        RandomModelChoice(ParametricNeuron, lambda: (random.choice(['theta', 'tauSr', 'tauRef']), None))
+        RandomModelChoice(
+            ParametricNeuron,
+            lambda: (random.choice(['theta', 'tauSr', 'tauRef']), None)
+        )
     ]
 
-    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> ParametricNeuronFaultModel:
+    def __new__(
+            cls,
+            model_choices: Optional[list[RandomModelChoice]] = None
+    ) -> ParametricNeuronFaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 
@@ -247,13 +302,25 @@ class StuckSynapse(FaultModel):
 
 class PerturbedSynapse(FaultModel):
     def __init__(self, percentage: float = None):
-        rho = percentage if percentage is not None else random.uniform(0.1, 3.0)
+        rho = (
+            percentage
+            if percentage is not None
+            else random.uniform(0.1, 3.0)
+        )
         super().__init__(FaultTarget.WEIGHT, mul_value, rho)
 
 
 class BitflippedSynapse(FaultModel):
-    def __init__(self, bit: int | Iterable[int], scale: float, zero_point: int, dtype: torch.dtype):
-        super().__init__(FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype)
+    def __init__(
+            self,
+            bit: int | Iterable[int],
+            scale: float,
+            zero_point: int,
+            dtype: torch.dtype
+    ):
+        super().__init__(
+            FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype
+        )
 
 
 class RandomSynapse(RandomFaultModel):
@@ -262,5 +329,8 @@ class RandomSynapse(RandomFaultModel):
         RandomModelChoice(PerturbedSynapse, select_chance=1 / 3)
     ]
 
-    def __new__(cls, model_choices: Optional[list[RandomModelChoice]] = None) -> FaultModel:
+    def __new__(
+            cls,
+            model_choices: Optional[list[RandomModelChoice]] = None
+    ) -> FaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
