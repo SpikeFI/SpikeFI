@@ -29,10 +29,11 @@ NET_DIR = os.path.join(OUT_DIR, 'net')
 
 def make_filepath(
         fname: str,
-        parentdir: str = '',
+        parentdir: str = OUT_DIR,
         rename: bool = False
 ) -> str:
     os.makedirs(parentdir, exist_ok=True)
+
     return os.path.join(
         parentdir,
         rename_if_multiple(fname, parentdir) if rename else fname
@@ -55,7 +56,7 @@ def make_net_filepath(fname: str, rename: bool = False) -> str:
     return make_filepath(fname, NET_DIR, rename)
 
 
-def calculate_trial(fname: str, parentdir: str) -> int:
+def calculate_trial(fname: str, parentdir: str = OUT_DIR) -> int:
     if not os.path.isdir(parentdir):
         return 0
 
@@ -73,7 +74,7 @@ def calculate_trial(fname: str, parentdir: str) -> int:
     ) + 1
 
 
-def rename_if_multiple(fname: str, parentdir: str) -> str:
+def rename_if_multiple(fname: str, parentdir: str = OUT_DIR) -> str:
     t = calculate_trial(fname, parentdir)
     if t == 0:
         return fname

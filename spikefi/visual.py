@@ -15,7 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from cycler import cycler
 from difflib import SequenceMatcher
 from itertools import cycle
@@ -43,8 +43,8 @@ CPAL = [
 
 def _data_mapping(
         cmpns_data: CampaignData | Iterable[CampaignData],
-        layer: str = None,
-        fault_model: sff.FaultModel = None
+        layer: str | None = None,
+        fault_model: sff.FaultModel | None = None
 ) -> dict[tuple[str, sff.FaultModel], dict[int, list[int]]]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -91,7 +91,7 @@ def _heat_reshape(N: int, R: float) -> tuple[int, int]:
 
 
 def _title(
-        cmpns_data: CampaignData | Iterable[CampaignData],
+        cmpns_data: CampaignData | Sequence[CampaignData],
         data_map: dict,
         model_friendly: str,
         plot_type: str,
@@ -143,10 +143,10 @@ def _title(
 
 
 def bar(
-        cmpns_data: CampaignData | Iterable[CampaignData],
-        model_friendly: str = None,
-        fig_size: tuple[float, float] = None,
-        title_suffix: str = None,
+        cmpns_data: CampaignData | Sequence[CampaignData],
+        model_friendly: str | None = None,
+        fig_size: tuple[float, float] | None = None,
+        title_suffix: str | None = None,
         format: str = 'svg',
         to_save: bool = True
 ) -> Figure:
@@ -256,15 +256,16 @@ def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
 
 
 def heat(
-        cmpns_data: CampaignData | Iterable[CampaignData],
-        layer: str = None, fault_model: sff.FaultModel = None,
+        cmpns_data: CampaignData | Sequence[CampaignData],
+        layer: str | None = None,
+        fault_model: sff.FaultModel | None = None,
         preserve_dim: bool = False,
         ratio: float = 1.0,
         max_area: int = 512**2,
         show_axes: bool = True,
-        model_friendly: str = None,
-        fig_size: tuple[float, float] = None,
-        title_suffix: str = None,
+        model_friendly: str | None = None,
+        fig_size: tuple[float, float] | None = None,
+        title_suffix: str | None = None,
         format: str = 'svg',
         to_save: bool = True
 ) -> list[Figure]:
@@ -376,13 +377,13 @@ def heat(
 
 
 def plot(
-        cmpns_data: CampaignData | Iterable[CampaignData],
-        layer: str = None,
+        cmpns_data: CampaignData | Sequence[CampaignData],
+        layer: str | None = None,
         legend_loc: str = "lower right",
-        xlabel: str = '',
-        model_friendly: str = None,
-        fig_size: tuple[float, float] = None,
-        title_suffix: str = None,
+        xlabel: str | None = None,
+        model_friendly: str | None = None,
+        fig_size: tuple[float, float] | None = None,
+        title_suffix: str | None = None,
         format: str = 'svg',
         to_save: bool = True
 ) -> Figure:
@@ -433,7 +434,8 @@ def plot(
         plt.xlim(np.min(x), np.max(x))
         if np.min(x) not in list(plt.xticks()[0]):
             plt.xticks(list(plt.xticks()[0]) + [np.min(x)])
-        plt.xlabel(xlabel)
+        if xlabel:
+            plt.xlabel(xlabel)
 
         plt.minorticks_on()
         plt.grid(visible=True, which='major', axis='y', alpha=0.5)
@@ -458,10 +460,10 @@ def plot(
 
 
 def plot_train(
-        cmpns_data: CampaignData | Iterable[CampaignData],
+        cmpns_data: CampaignData | Sequence[CampaignData],
         x_range: range,
-        fig_size: tuple[float, float] = None,
-        title_suffix: str = None,
+        fig_size: tuple[float, float] | None = None,
+        title_suffix: str | None = None,
         format: str = 'svg',
         to_save: bool = True
 ) -> Figure:
@@ -511,9 +513,9 @@ def plot_train(
 
 
 def learning_curve(
-        cmpns_data: CampaignData | Iterable[CampaignData],
-        fig_size: tuple[float, float] = None,
-        title_suffix: str = None,
+        cmpns_data: CampaignData | Sequence[CampaignData],
+        fig_size: tuple[float, float] | None = None,
+        title_suffix: str | None = None,
         format: str = 'svg',
         to_save: bool = True
 ) -> list[Figure]:

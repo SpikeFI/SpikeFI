@@ -15,7 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import copy, deepcopy
 from enum import auto, Flag
 from math import log2, ceil
@@ -33,7 +33,7 @@ from spikefi.utils.layer import LayersInfo
 class FaultSite:
     def __init__(
             self,
-            layer_name: str = "",
+            layer_name: str | None = None,
             position: tuple[int, ...] = ()
     ) -> None:
         self.layer = layer_name
@@ -119,7 +119,8 @@ class FaultModel:
     def __init__(
             self,
             target: FaultTarget,
-            method: Callable[..., float | Tensor], *args
+            method: Callable[..., float | Tensor],
+            *args
     ) -> None:
         assert len(target) == 1, 'Fault Model must have exactly 1 Fault Target'
         self.target = target
@@ -209,13 +210,13 @@ class Fault:
     def __init__(
             self,
             model: FaultModel,
-            sites: FaultSite | Iterable[FaultSite] = None
+            sites: FaultSite | Iterable[FaultSite] | None = None
     ) -> None:
         self.model = model
         self.sites: set[FaultSite] = set()
         self.sites_pending: list[FaultSite] = []
 
-        if sites is None:
+        if not sites:
             return
 
         if isinstance(sites, Iterable):
@@ -269,9 +270,6 @@ class Fault:
         return s
 
     def add_site(self, site: FaultSite) -> None:
-        if site is None:
-            return
-
         if site.is_defined():
             self.sites.add(site)
         else:
@@ -318,7 +316,7 @@ class Fault:
         )
 
     @staticmethod
-    def merge(faults: list['Fault']) -> 'Fault':
+    def merge(faults: Sequence['Fault']) -> 'Fault':
         assert bool(faults), 'Cannot merge empty list of faults'
 
         is_ok = True
@@ -337,8 +335,8 @@ class Fault:
     def multiple_random_absolute(
         model: FaultModel,
         sites_num: int,
-        layers: list[str] = None,
-        layer_sizes: list[int] = None
+        layers: Sequence[str],
+        layer_sizes: Sequence[int] | None = None
     ) -> 'Fault':
         sites = []
         for _ in range(sites_num):
@@ -351,10 +349,12 @@ class Fault:
     def multiple_random_percent(
         model: FaultModel,
         fault_density: float,
-        layers: list[str] = None,
-        layer_sizes: list[int] = None
+        layers: Sequence[str],
+        layer_sizes: Sequence[int]
     ) -> 'Fault':
         faults = []
+        assert len(layers) == len(layer_sizes)
+
         for i, layer in enumerate(layers):
             sites_num = ceil(layer_sizes[i] * fault_density)
             faults.append(
@@ -377,11 +377,6 @@ class Fault:
             self.sites_pending.remove(s)
 
     def update_sites(self, sites: Iterable[FaultSite]) -> None:
-        if sites is None:
-            return
-        if not isinstance(sites, Iterable):
-            raise TypeError(f"'{type(sites).__name__}' object is not iterable")
-
         for s in sites:
             self.add_site(s)
 
@@ -471,11 +466,6 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
                     del self[key]
 
     def extract_many(self, faults: Iterable[Fault]) -> None:
-        if faults is None:
-            return
-        if not isinstance(faults, Iterable):
-            raise TypeError(f"'{type(faults).__name__}' is not iterable.")
-
         for f in faults:
             self.extract(f)
 
@@ -492,11 +482,6 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
             self.fault_map[s.layer][fault.model.target.get_index()] = True
 
     def insert_many(self, faults: Iterable[Fault]) -> None:
-        if faults is None:
-            return
-        if not isinstance(faults, Iterable):
-            raise TypeError(f"'{type(faults).__name__}' is not iterable.")
-
         for f in faults:
             self.insert(f)
 

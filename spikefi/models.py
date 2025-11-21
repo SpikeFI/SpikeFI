@@ -19,7 +19,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 import random
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Iterable, Literal, Sequence
 
 import torch
 from torch import Tensor
@@ -63,8 +63,13 @@ def qua_value(
 # LSB: bit 0
 # MSB: bit N-1
 # Works with torch.quint8, torch.qint8, torch.qint32
-def bfl_value(original: Tensor, bit: int | Iterable[int] | Tensor,
-              scale: float, zero_point: int, dtype: torch.dtype) -> Tensor:
+def bfl_value(
+        original: Tensor,
+        bit: int | Iterable[int] | Tensor,
+        scale: float,
+        zero_point: int,
+        dtype: torch.dtype
+) -> Tensor:
     if isinstance(bit, int):
         bit = [bit]
     assert all(0 <= b < qiinfo(dtype).bits for b in bit), (
@@ -154,11 +159,11 @@ class ParametricNeuronFaultModel(FaultModel):
 class RandomModelChoice:
     model_cls: type
     args_factory: Callable[[], tuple[Any, ...]] = field(default=lambda: ())
-    select_chance: Optional[float] = None
+    select_chance: float | None = None
 
 
 class RandomFaultModel:
-    def __new__(cls, model_choices: list[RandomModelChoice]) -> FaultModel:
+    def __new__(cls, model_choices: Sequence[RandomModelChoice]) -> FaultModel:
         total_weight = 0.0
         none_count = 0
         for c in model_choices:
@@ -205,7 +210,7 @@ class SaturatedNeuron(FaultModel):
 
 
 class StuckNeuron(FaultModel):
-    def __init__(self, x: float = None):
+    def __init__(self, x: float | None = None):
         _x = x if x is not None else random.uniform(0, 1)
         assert _x >= 0.0 and _x <= 1.0, (
             'Stuck-at value x needs to be in the range [0, 1]'
@@ -222,13 +227,17 @@ class RandomNeuron(RandomFaultModel):
 
     def __new__(
             cls,
-            model_choices: Optional[list[RandomModelChoice]] = None
+            model_choices: Sequence[RandomModelChoice] | None = None
     ) -> FaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
 
 class ParametricNeuron(ParametricNeuronFaultModel):
-    def __init__(self, param_name: str, percentage: float = None) -> None:
+    def __init__(
+            self,
+            param_name: str,
+            percentage: float | None = None
+    ) -> None:
         rho = (
             percentage
             if percentage is not None
@@ -238,17 +247,17 @@ class ParametricNeuron(ParametricNeuronFaultModel):
 
 
 class IntegrationFaultNeuron(ParametricNeuron):
-    def __init__(self, percentage: float = None) -> None:
+    def __init__(self, percentage: float | None = None) -> None:
         super().__init__('tauSr', percentage)
 
 
 class RefractoryFaultNeuron(ParametricNeuron):
-    def __init__(self, percentage: float = None) -> None:
+    def __init__(self, percentage: float | None = None) -> None:
         super().__init__('tauRef', percentage)
 
 
 class ThresholdFaultNeuron(ParametricNeuron):
-    def __init__(self, percentage: float = None) -> None:
+    def __init__(self, percentage: float | None = None) -> None:
         super().__init__('theta', percentage)
 
 
@@ -262,7 +271,7 @@ class RandomParametricNeuron(RandomFaultModel):
 
     def __new__(
             cls,
-            model_choices: Optional[list[RandomModelChoice]] = None
+            model_choices: Sequence[RandomModelChoice] | None = None
     ) -> ParametricNeuronFaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)
 
@@ -274,9 +283,13 @@ class DeadSynapse(FaultModel):
 
 
 class SaturatedSynapse(FaultModel):
-    def __init__(self, Q1: float | Tensor, Q3: float | Tensor,
-                 tail: Literal['upper', 'lower'] = 'lower',
-                 intensity: Literal['mild', 'extreme'] = 'mild') -> None:
+    def __init__(
+            self,
+            Q1: float | Tensor,
+            Q3: float | Tensor,
+            tail: Literal['upper', 'lower'] = 'lower',
+            intensity: Literal['mild', 'extreme'] = 'mild'
+    ) -> None:
         # Q1 = torch.quantile(weight_matrix, 0.25)
         # Q3 = torch.quantile(weight_matrix, 0.75)
         Q1 = torch.as_tensor(Q1, dtype=torch.float32)
@@ -301,7 +314,7 @@ class StuckSynapse(FaultModel):
 
 
 class PerturbedSynapse(FaultModel):
-    def __init__(self, percentage: float = None):
+    def __init__(self, percentage: float | None = None):
         rho = (
             percentage
             if percentage is not None
@@ -331,6 +344,6 @@ class RandomSynapse(RandomFaultModel):
 
     def __new__(
             cls,
-            model_choices: Optional[list[RandomModelChoice]] = None
+            model_choices: Sequence[RandomModelChoice] | None = None
     ) -> FaultModel:
         return super().__new__(cls, model_choices or cls.DEF_MODEL_CHOICES)

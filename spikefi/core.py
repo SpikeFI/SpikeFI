@@ -249,8 +249,8 @@ class Campaign:
     def inject_complete(
             self,
             fault_model: sff.FaultModel,
-            layer_names: str | Iterable[str] = [],
-            fault_sampling_k: int = None
+            layer_names: str | Iterable[str] | None = None,
+            fault_sampling_k: int | None = None
     ) -> list[sff.Fault]:
         if isinstance(layer_names, str):
             layer_names = [layer_names]
@@ -294,8 +294,8 @@ class Campaign:
 
     def eject(
             self,
-            faults: sff.Fault | Iterable[sff.Fault] = None,
-            round_idx: int = None
+            faults: sff.Fault | Iterable[sff.Fault] | None = None,
+            round_idx: int | None = None
     ) -> None:
         if isinstance(faults, sff.Fault):
             faults = [faults]
@@ -341,9 +341,14 @@ class Campaign:
             self.faulty
         )
 
-    def run_train(self, epochs: int, train_loader: DataLoader,
-                  optimizer: Optimizer, spike_loss: snn.loss,
-                  progress_mode: str = '') -> list[nn.Module]:
+    def run_train(
+            self,
+            epochs: int,
+            train_loader: DataLoader,
+            optimizer: Optimizer,
+            spike_loss: snn.loss,
+            progress_mode: str | None = None
+    ) -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(
             len(train_loader), len(self.rounds), epochs
@@ -384,10 +389,10 @@ class Campaign:
     def run(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss = None,
+            spike_loss: snn.loss | None = None,
             es_tol: int = 0,
             opt: CampaignOptimization = CampaignOptimization.FO,
-            progress_mode: str = ''
+            progress_mode: str | None = None
     ) -> Tensor | None:
         self._pre_run(opt)
 
@@ -602,7 +607,7 @@ class Campaign:
     def _evaluate_single(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss = None
+            spike_loss: snn.loss | None = None
     ) -> None:
         for _, (_, input, target, label) in enumerate(test_loader):
             self.progress.step_batch()
@@ -616,7 +621,7 @@ class Campaign:
     def _evaluate_O0(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss = None
+            spike_loss: snn.loss | None = None
     ) -> None:
         # For each fault round group
         for round_group in self.rgroups.values():
@@ -628,7 +633,7 @@ class Campaign:
     def _evaluate_O1(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss = None
+            spike_loss: snn.loss | None = None
     ) -> None:
         # For each batch
         for _, (_, input, target, label) in enumerate(test_loader):
@@ -649,7 +654,7 @@ class Campaign:
     def _evaluate_optimized(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss = None,
+            spike_loss: snn.loss | None = None,
             es_tol: int = 0
     ) -> Tensor:
         N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
@@ -716,7 +721,7 @@ class Campaign:
             output: Tensor,
             target: Tensor,
             label: Tensor,
-            spike_loss: snn.loss = None,
+            spike_loss: snn.loss | None = None,
             training: bool = False
     ) -> None:
         perf = self.performance[self.r_idx]
@@ -732,10 +737,14 @@ class Campaign:
     def export(self) -> 'CampaignData':
         return CampaignData(__version__, self)
 
-    def save(self, fname: str = None) -> None:
+    def save(self, fname: str | None = None) -> None:
         self.export().save(fname)
 
-    def save_net(self, net: nn.Module = None, fname: str = None) -> None:
+    def save_net(
+            self,
+            net: nn.Module | None = None,
+            fname: str | None = None
+    ) -> None:
         to_save = net or self.faulty
         if not to_save:
             return
@@ -748,14 +757,14 @@ class Campaign:
     @staticmethod
     def load(
         fpath: str,
-        unpickler_type: type[pickle.Unpickler] = None
+        unpickler_type: type[pickle.Unpickler] | None = None
     ) -> 'Campaign':
         return CampaignData.load(fpath, unpickler_type).build()
 
     @staticmethod
     def load_many(
         pathname: str,
-        unpickler_type: type[pickle.Unpickler] = None
+        unpickler_type: type[pickle.Unpickler] | None = None
     ) -> list['Campaign']:
         return CampaignData.load_many(pathname, unpickler_type).build()
 
@@ -806,7 +815,7 @@ class Campaign:
 
     def _neuron_hook_wrapper(
             self,
-            faults: list[sff.Fault],
+            faults: Iterable[sff.Fault],
             layer_shape: tuple[int, int, int],
             r_idx: int
     ) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
@@ -837,7 +846,7 @@ class Campaign:
 
     def _neuron_param_hook_wrapper(
             self,
-            faults: list[sff.Fault],
+            faults: Iterable[sff.Fault],
             r_idx: int
     ) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def neuron_param_hook(_, __, spikes_out: Tensor) -> None:
@@ -855,7 +864,7 @@ class Campaign:
 
     def _synapse_hook_wrapper(
             self,
-            faults: list[sff.Fault],
+            faults: Iterable[sff.Fault],
             r_idx: int
     ) -> Callable[[nn.Module, tuple[Tensor, ...]], None]:
         def _synapse_hook_core(to_perturb: bool, layer: nn.Module) -> None:
@@ -935,7 +944,7 @@ class CampaignData:
 
         return campaign
 
-    def save(self, fname: str = None) -> None:
+    def save(self, fname: str | None = None) -> None:
         with open(
             sfio.make_res_filepath(
                 (fname or self.name) + '.pkl', rename=True
@@ -946,7 +955,7 @@ class CampaignData:
     @staticmethod
     def load(
         fpath: str,
-        unpickler_type: type[pickle.Unpickler] = None
+        unpickler_type: type[pickle.Unpickler] | None = None
     ) -> 'CampaignData':
         with open(fpath, 'rb') as pkl:
             if unpickler_type is None:
@@ -956,7 +965,7 @@ class CampaignData:
     @staticmethod
     def load_many(
         pathname: str,
-        unpickler_type: type[pickle.Unpickler] = None
+        unpickler_type: type[pickle.Unpickler] | None = None
     ) -> list['CampaignData']:
         tore = []
         for f in glob(pathname):

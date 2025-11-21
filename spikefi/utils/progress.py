@@ -20,6 +20,7 @@ from itertools import cycle
 import re
 from threading import Lock
 from time import sleep, time
+from typing import Any
 from tqdm import tqdm
 
 
@@ -28,7 +29,7 @@ class CampaignProgress:
             self,
             batches_num: int,
             rounds_num: int,
-            epochs_num: int = None
+            epochs_num: int | None = None
     ) -> None:
         self.is_training = bool(epochs_num)
         self.loss = 0.
@@ -53,12 +54,12 @@ class CampaignProgress:
 
         self._lock = Lock()
 
-    def __getstate__(self):
+    def __getstate__(self) -> Any:
         state = self.__dict__.copy()
         del state['_lock']
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Any) -> None:
         self.__dict__.update(state)
         self._lock = Lock()
 
@@ -120,7 +121,7 @@ class CampaignProgress:
 
         return None
 
-    def show(self, mode='') -> None:
+    def show(self, mode: str | None = None) -> None:
         if not mode:
             try:
                 get_ipython()  # type: ignore
@@ -181,7 +182,7 @@ class CampaignProgress:
 def refresh_progress_job(
         progress: CampaignProgress,
         interval: float = 0.1,
-        mode: str = ''
+        mode: str | None = None
 ) -> None:
     while not progress.has_finished():
         progress.show(mode)
