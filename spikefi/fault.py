@@ -228,6 +228,7 @@ class Fault:
         assert self.model == other.model, (
             'Only two Faults with the same Fault Model can be added'
         )
+
         return Fault(
             deepcopy(self.model),
             self.get_sites(include_pending=True)
@@ -282,7 +283,8 @@ class Fault:
 
         return separated_faults
 
-    # Concatenates multiple faults of exact same model
+    # Sorts faults by their fault model and
+    # merges multiple faults of same model
     @staticmethod
     def buildup(faults: Iterable['Fault']) -> list['Fault']:
         merged = {}
@@ -316,52 +318,57 @@ class Fault:
         )
 
     @staticmethod
-    def merge(faults: Sequence['Fault']) -> 'Fault':
-        assert bool(faults), 'Cannot merge empty list of faults'
-
-        is_ok = True
-        model = faults[0].model
-        fault = Fault(model)
-
-        for f in faults:
-            is_ok = is_ok and f.model == model
-            fault.update_sites(f.get_sites(include_pending=True))
-
-        assert is_ok, 'Only faults with the same fault model can be merged'
-
-        return fault
-
-    @staticmethod
     def multiple_random_absolute(
         model: FaultModel,
         sites_num: int,
-        layers: Sequence[str],
+        layers: Sequence[str] | str | None = None,
         layer_sizes: Sequence[int] | None = None
     ) -> 'Fault':
+        if isinstance(layers, str):
+            ran_lay = layers
+        elif isinstance(layers, Sequence) and len(layers) == 1:
+            ran_lay = layers[0]
+        else:
+            ran_lay = None
+
         sites = []
         for _ in range(sites_num):
-            ran_lay = random.choices(layers, weights=layer_sizes, k=1)[0]
-            sites.append(FaultSite(ran_lay) if layers else FaultSite())
+            if not layers:
+                sites.append(FaultSite())
+                continue
+
+            ran_lay = ran_lay or (
+                random.choices(layers, weights=layer_sizes, k=1)[0]
+            )
+            sites.append(FaultSite(ran_lay))
 
         return Fault(model, sites)
 
     @staticmethod
     def multiple_random_percent(
         model: FaultModel,
-        fault_density: float,
+        fault_density: float | Sequence[float],
         layers: Sequence[str],
         layer_sizes: Sequence[int]
     ) -> 'Fault':
-        faults = []
-        assert len(layers) == len(layer_sizes)
+        assert len(layer_sizes) == len(layers), (
+            'For every layer provided there needs to be a layer_size as well.'
+        )
+        if isinstance(fault_density, Sequence):
+            assert len(fault_density) == len(layers), (
+                'For every layer provided there needs to be a fault_density.'
+            )
+        else:
+            fault_density = [fault_density] * len(layers)
 
+        faults = []
         for i, layer in enumerate(layers):
-            sites_num = ceil(layer_sizes[i] * fault_density)
+            sites_num = ceil(layer_sizes[i] * fault_density[i])
             faults.append(
-                Fault.multiple_random_absolute(model, sites_num, [layer])
+                Fault.multiple_random_absolute(model, sites_num, layer)
             )
 
-        return Fault.merge(faults)
+        return Fault.buildup(faults)[0]
 
     def refresh(self, discard_duplicates: bool = False) -> None:
         newly_defined = []

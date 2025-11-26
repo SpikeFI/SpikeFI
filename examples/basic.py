@@ -55,10 +55,7 @@ fy = Fault(
     FaultSite('SF1', (0, 0, 0, 0))
 )
 # Fault 'fz' is a multiple neuron parametric threshold fault in layer SF1
-fz = Fault(
-    ThresholdFaultNeuron(3),
-    [FaultSite('SF1', (2, 0, 0)), FaultSite('SF1', (1, 0, 0))]
-)
+fz = Fault.multiple_random_absolute(ThresholdFaultNeuron(3), 4, 'SF1')
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject(fx)

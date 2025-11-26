@@ -145,13 +145,19 @@ class Campaign:
         if isinstance(faults, sff.Fault):
             faults = [faults]
 
-        self.define_random(faults)
-        inj_faults = self.validate(faults)
-        inj_faults = sff.Fault.buildup(inj_faults)
+        # Merge newly injected faults with the ones already injected
+        # in this round to ensure the uniqueness and validity of all
+        # faults in the entire fault round.
+        round_faults = [*self.rounds[round_idx].get_faults(), *faults]
 
-        self.rounds[round_idx].insert_many(inj_faults)
+        round_faults = sff.Fault.buildup(round_faults)
+        self.define_random(round_faults)
+        round_faults = self.validate(round_faults)
 
-        return inj_faults
+        self.rounds[round_idx].clear()
+        self.rounds[round_idx].insert_many(round_faults)
+
+        return round_faults
 
     def define_random(
             self,
