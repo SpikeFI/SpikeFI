@@ -47,15 +47,14 @@ cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 # Fault 'fx' is a Dead Neuron in layer SF2
 fx = Fault(
     DeadNeuron(),
-    FaultSite('SF2', (3, 0, 0))
+    FaultSite('SF2')
 )
-# Fault 'fy' is a Stuck Synapse fault between layers SF1 and SF2
+# Fault 'fy' is a Stuck Synapse fault randomly placed in the network
 fy = Fault(
-    StuckSynapse(10.),
-    FaultSite('SF1', (0, 0, 0, 0))
+    StuckSynapse(100.)
 )
 # Fault 'fz' is a multiple neuron parametric threshold fault in layer SF1
-fz = Fault.multiple_random_absolute(ThresholdFaultNeuron(3), 4, 'SF1')
+fz = Fault.multiple_random_absolute(ThresholdFaultNeuron(3.), 4, 'SF1')
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject(fx)

@@ -210,14 +210,11 @@ class Fault:
     def __init__(
             self,
             model: FaultModel,
-            sites: FaultSite | Iterable[FaultSite] | None = None
+            sites: FaultSite | Iterable[FaultSite] = FaultSite()
     ) -> None:
         self.model = model
         self.sites: set[FaultSite] = set()
         self.sites_pending: list[FaultSite] = []
-
-        if not sites:
-            return
 
         if isinstance(sites, Iterable):
             self.update_sites(sites)
@@ -482,7 +479,7 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
 
         for s in fault.sites:
             key = (s.layer, fault.model)
-            self.setdefault(key, Fault(deepcopy(fault.model)))
+            self.setdefault(key, Fault(deepcopy(fault.model), []))
             self[key].add_site(s)
 
             self.fault_map.setdefault(s.layer, [False] * 3)
