@@ -26,7 +26,6 @@ import random
 from threading import Thread
 from types import MethodType
 from typing import Optional
-from warnings import warn
 
 import torch
 from torch import nn, Tensor
@@ -64,14 +63,15 @@ class Campaign:
             name: str = 'sfi-campaign'
     ) -> None:
         self.name = name
-        self.golden = net
-        setattr(self.golden, 'tail', torch.nn.Identity())
-        self.golden.eval()
+        self.slayer = deepcopy(slayer)
         self.faulty = None
-        self.slayer = slayer
         self.device = torch.device(
             'cuda:0' if torch.cuda.is_available() else 'cpu'
         )
+
+        self.golden = deepcopy(net).to(self.device)
+        setattr(self.golden, 'tail', torch.nn.Identity())
+        self.golden.eval()
 
         self.layers_info = LayersInfo(shape_in)
         self.infer_layers_info()
@@ -741,7 +741,7 @@ class Campaign:
             stat.lossSum += spike_loss.numSpikes(output, target).cpu().item()
 
     def export(self) -> 'CampaignData':
-        return CampaignData(__version__, self)
+        return CampaignData(self)
 
     def save(self, fname: str | None = None) -> None:
         self.export().save(fname)
@@ -765,14 +765,17 @@ class Campaign:
         fpath: str,
         unpickler_type: type[pickle.Unpickler] | None = None
     ) -> 'Campaign':
-        return CampaignData.load(fpath, unpickler_type).build()
+        return CampaignData.load(fpath, unpickler_type).restore()
 
     @staticmethod
     def load_many(
         pathname: str,
         unpickler_type: type[pickle.Unpickler] | None = None
     ) -> list['Campaign']:
-        return CampaignData.load_many(pathname, unpickler_type).build()
+        return [
+            cmpn_data.restore()
+            for cmpn_data in CampaignData.load_many(pathname, unpickler_type)
+        ]
 
     @staticmethod
     def _forward_opt_wrapper(
@@ -898,55 +901,48 @@ class Campaign:
         return synapse_pre_hook, synapse_hook
 
 
+# CampaignData is essential for the (de)serialization of Campaign
+# objects and the easy handling of results with the spikefi visual
+# module functions.
 class CampaignData:
-    def __init__(self, version: str, campaign: Campaign) -> None:
-        self.version = version
+    def __init__(self, campaign: Campaign) -> None:
+        self.version = __version__
+        self.name = campaign.name
 
-        has_pbar = hasattr(campaign, 'progress')
-        if has_pbar:
-            pbar = campaign.progress.pbar
-            campaign.progress.pbar = None
+        self.golden = deepcopy(campaign.golden).to('cpu')
+        self.slayer = deepcopy(campaign.slayer)
+        self.device = deepcopy(campaign.device)
 
-        cmpn = deepcopy(campaign)
+        self.layers_info = deepcopy(campaign.layers_info)
 
-        if has_pbar:
-            campaign.progress.pbar = pbar
-
-        self.name = cmpn.name
-
-        self.golden = cmpn.golden
-        self.slayer = cmpn.slayer
-        self.device = cmpn.device
-
-        self.layers_info = cmpn.layers_info
+        self.faulty = deepcopy(campaign.faulty).to('cpu')
+        self.faulties = (
+            [f.to('cpu') for f in deepcopy(campaign.faulties)]
+            if getattr(campaign, 'faulties', None) is not None
+            else None
+        )
 
         # Restore default forward function to golden network
         self.golden.forward = MethodType(
             type(self.golden).forward, self.golden
         )
 
-        self.duration = cmpn.duration
-        self.rounds = cmpn.rounds
-        self.orounds = cmpn.orounds
-        self.rgroups = cmpn.rgroups
-        self.performance = cmpn.performance
+        self.duration = campaign.duration
+        self.rounds = deepcopy(campaign.rounds)
+        self.orounds = deepcopy(campaign.orounds)
+        self.rgroups = deepcopy(campaign.rgroups)
+        self.handles = deepcopy(campaign.handles)
+        self.performance = deepcopy(campaign.performance)
 
-    def build(self) -> Campaign:
+    # Restoring a Campaign from its Campaign Data relies on reconstructing
+    # the Campaign object (i.e., calling Campaign.__init__()), which is
+    # not directly applicable in the case of using __get/setstate__ with
+    # a dictionary containing the Campaign Data object in Campaign.
+    def restore(self) -> Campaign:
         campaign = Campaign(
             self.golden, self.layers_info.shape_in, self.slayer, self.name
         )
-        campaign.layers_info = self.layers_info
-        campaign.duration = self.duration
         campaign.rounds = self.rounds
-        campaign.orounds = self.orounds
-        campaign.rgroups = self.rgroups
-        campaign.performance = self.performance
-
-        if self.version != __version__:
-            warn(
-                'The loaded campaign object was created with a different '
-                'version of the SpikeFI framework.', DeprecationWarning
-            )
 
         return campaign
 
@@ -973,14 +969,7 @@ class CampaignData:
         pathname: str,
         unpickler_type: type[pickle.Unpickler] | None = None
     ) -> list['CampaignData']:
-        tore = []
-        for f in glob(pathname):
-            with open(f, 'rb') as pkl:
-                o = (
-                    pickle.load(pkl)
-                    if unpickler_type is None
-                    else unpickler_type(pkl).load()
-                )
-                tore.append(o)
-
-        return tore
+        return [
+            CampaignData.load(fpath, unpickler_type)
+            for fpath in glob(pathname)
+        ]
