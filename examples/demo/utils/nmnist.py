@@ -8,8 +8,8 @@ def organize(
         default_path: str,
         zip_path: str = None
 ) -> None:
-    url = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com"
-    "/468j46mzdv-1.zip"
+    url = ("https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com"
+    "/468j46mzdv-1.zip")
     nmnist_path = os.path.join(datasets_path, 'N-MNIST')
 
     if os.path.exists(nmnist_path):
