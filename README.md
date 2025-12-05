@@ -149,26 +149,24 @@ To simplify and accelerate the get-started experience, `demo` is equipped with s
 To install the N-MNIST dataset, simply execute the following commands:
 
 ```
-cd examples/
-python3 -m demo.setup_nmnist
+python3 examples/demo/setup_nmnist.py
 ```
 
-`setup_nmnist` downloads the N-MNIST dataset files, extracts them, converts them in the needed binary format, and places them under the proper directory hierarchy. The default setup location is set at `examples/demo/datasets/`, which can be modified by passing another directory path with the `--dir` argument. If the dataset's `.zip` file has already been downloaded, the `--archive` argument accepts the path to it and skips re-downloading it. Finally, the `--force` argument, forces a clean (re-)installment of the dataset. Here follows an example of the full command:
+`setup_nmnist` downloads the N-MNIST dataset files and extracts them using the `tonic` library and then places them under the proper directory hierarchy. The default setup location is set at `examples/demo/datasets/`, which can be modified by passing another directory path with the `--dir` argument. The `--force` argument, forces a clean installment of the dataset. Here follows an example of the full command:
 
-`python3 -m demo.setup_nmnist [-h] [--force] [--dir DEST_DIR] [-- archive DATASET_ARCHIVE]`
+`python3 examples/demo/setup_nmnist.py [-h] [--force] [--dir DEST_DIR]
 
 ### <u>IBM DVS128 Gesture Dataset</u>
 
-Installing the IBM DVS128 Gesture dataset follows a similar procedure as previously. The only difference is that the <u>__dataset archive needs to be downloaded in advance__</u> and its path to be designated with the `--archive` argument.
+Installing the IBM DVS128 Gesture dataset follows a similar procedure as previously.
 
 ```
-cd examples/
-python3 -m demo.setup_gesture --archive path_to_dataset_archive
+python3 examples/demo/setup_gesture.py
 ```
 
 A full example of the `setup_gesture.py` script is as follows:
 
-`python3 -m demo.setup_gesture --archive DATASET_ARCHIVE [-h] [--force] [--dir DEST_DIR]`
+`python3 examples/demo/setup_gesture.py [-h] [--force] [--dir DEST_DIR]`
 
 ### Trained SNN models
 

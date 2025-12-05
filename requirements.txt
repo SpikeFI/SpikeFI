@@ -1,6 +1,7 @@
-cycler>=0.12
-matplotlib>=3.7
-numpy~=1.26
-pyyaml>=6.0
-torch>=2.1
-tqdm>=4.67
+cycler>=0.12.1
+matplotlib>=3.7.5
+numpy~=1.26.4
+pyyaml>=6.0.3
+tonic>=1.6.0
+torch>=2.1.2
+tqdm>=4.67.1

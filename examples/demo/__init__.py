@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 import slayerSNN as snn
 import spikefi.utils.io as sfio
+from typing import Literal
 
 
 SUPPORTED_CASE_STUDIES = ['nmnist-lenet', 'nmnist-deep', 'gesture']
@@ -37,7 +38,7 @@ def is_demo_ready():
 
 
 def prepare(
-        casestudy: str,
+        casestudy: Literal['nmnist-lenet', 'nmnist-deep', 'gesture'],
         dropout: bool = False,
         fyamlname=None,
         batchsize=None,
