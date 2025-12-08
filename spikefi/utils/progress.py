@@ -20,7 +20,7 @@ from itertools import cycle
 import re
 from threading import Lock
 from time import sleep, time
-from typing import Any
+from typing import Any, Literal
 from tqdm import tqdm
 
 
@@ -121,7 +121,10 @@ class CampaignProgress:
 
         return None
 
-    def show(self, mode: str | None = None) -> None:
+    def show(
+            self,
+            mode: Literal['verbose', 'table', 'pbar', 'silent'] | None = None
+    ) -> None:
         if not mode:
             try:
                 get_ipython()  # type: ignore
@@ -182,7 +185,7 @@ class CampaignProgress:
 def refresh_progress_job(
         progress: CampaignProgress,
         interval: float = 0.1,
-        mode: str | None = None
+        mode: Literal['verbose', 'table', 'pbar', 'silent'] | None = None
 ) -> None:
     while not progress.has_finished():
         progress.show(mode)

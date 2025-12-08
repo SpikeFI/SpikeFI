@@ -60,13 +60,14 @@ class Campaign:
             net: nn.Module,
             shape_in: tuple[int, int, int],
             slayer: spikeLayer,
-            name: str = 'sfi-campaign'
+            name: str = 'sfi-campaign',
+            device: torch.device | None = None,
     ) -> None:
         self.name = name
         self.slayer = deepcopy(slayer)
         self.faulty = None
-        self.device = torch.device(
-            'cuda:0' if torch.cuda.is_available() else 'cpu'
+        self.device = device or torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu'
         )
 
         self.golden = deepcopy(net).to(self.device)
@@ -353,7 +354,9 @@ class Campaign:
             train_loader: DataLoader,
             optimizer: Optimizer,
             spike_loss: snn.loss,
-            progress_mode: str | None = None
+            progress_mode: Literal[
+                'verbose', 'table', 'pbar', 'silent'
+            ] | None = None
     ) -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(
@@ -399,7 +402,9 @@ class Campaign:
             spike_loss: snn.loss | None = None,
             es_tol: int = 0,
             opt: CampaignOptimization = CampaignOptimization.FO,
-            progress_mode: str | None = None
+            progress_mode: Literal[
+                'verbose', 'table', 'pbar', 'silent'
+            ] | None = None
     ) -> Tensor | None:
         self._pre_run(opt)
 
