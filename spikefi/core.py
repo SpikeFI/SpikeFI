@@ -602,20 +602,18 @@ class Campaign:
             self.progress.step_epoch()
             faulty.train()
 
-            for _, (_, input, target, label) in enumerate(train_loader):
+            for input, label in train_loader:
                 self.progress.step_batch()
 
-                target = target.to(self.device)
                 output = faulty.forward(input.to(self.device))
 
-                loss = spike_loss.numSpikes(output, target)
+                loss, _ = self._advance_performance(
+                    output, label.to(self.device), spike_loss, training=True
+                )
+
                 optimizer_.zero_grad()
                 loss.backward()
                 optimizer_.step()
-
-                self._advance_performance(
-                    output, target, label, spike_loss, training=True
-                )
 
                 self.progress.set_train(stat.loss(), stat.accuracy())
                 self.progress.step()
@@ -633,12 +631,13 @@ class Campaign:
             test_loader: DataLoader,
             spike_loss: snn.loss | None = None
     ) -> None:
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
             self.progress.step_batch()
+
             output = self.faulty(input.to(self.device))
 
             self._advance_performance(
-                output, target.to(self.device), label, spike_loss
+                output, label.to(self.device), spike_loss
             )
             self.progress.step()
 
@@ -661,7 +660,7 @@ class Campaign:
             spike_loss: snn.loss | None = None
     ) -> None:
         # For each batch
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
             self.progress.step_batch()
 
             # For each fault round group
@@ -670,10 +669,11 @@ class Campaign:
                 for r_idx in round_group:
                     self.r_idx_ref.r = r_idx
                     self.progress.step_round()
+
                     output = self.faulty(input.to(self.device))
 
                     self._advance_performance(
-                        output, target.to(self.device), label, spike_loss
+                        output, label.to(self.device), spike_loss
                     )
                     self.progress.step()
 
@@ -686,7 +686,7 @@ class Campaign:
         N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
 
         # For each batch
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
             self.progress.step_batch()
 
             # Store golden spikes
@@ -737,7 +737,7 @@ class Campaign:
                     )
 
                     self._advance_performance(
-                        output, target.to(self.device), label, spike_loss
+                        output, label.to(self.device), spike_loss
                     )
                     self.progress.step()
 
@@ -746,20 +746,32 @@ class Campaign:
     def _advance_performance(
             self,
             output: Tensor,
-            target: Tensor,
             label: Tensor,
             spike_loss: snn.loss | None = None,
             training: bool = False
-    ) -> None:
+    ) -> tuple[Tensor, int] | None:
         perf = self.performance[self.r_idx_ref.r]
         stat = perf.training if training else perf.testing
 
         stat.correctSamples += torch.sum(
-            snn.predict.getClass(output) == label
+            snn.predict.getClass(output) == label.cpu()
         ).item()
         stat.numSamples += len(label)
+
         if spike_loss:
-            stat.lossSum += spike_loss.numSpikes(output, target).cpu().item()
+            # Create one-hot vector for labels
+            # target[b, label[b], 0, 0, 0] = 1
+            target = (
+                torch.zeros_like(output[..., :1])
+                .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
+            )
+
+            loss = spike_loss.numSpikes(output, target)
+            stat.lossSum += loss.cpu().item()
+
+            return target, loss
+
+        return None
 
     def export(self) -> 'CampaignData':
         return CampaignData(self)

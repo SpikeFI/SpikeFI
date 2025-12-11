@@ -1,6 +1,5 @@
 __all__ = [
-    "architectures", "utils", "setup_nmnist", "setup_gesture",
-    "Dataset", "Network"
+    "architectures", "Dataset", "Network"
 ]
 
 import os
@@ -8,10 +7,15 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 import slayerSNN as snn
 import spikefi.utils.io as sfio
-from typing import Literal
+from typing import Any, Callable, get_args, Iterable, Literal
 
 
-SUPPORTED_CASE_STUDIES = ['nmnist-lenet', 'nmnist-deep', 'gesture']
+# TODO: Review and fix all examples after changes in the init file
+
+SUPPORTED_CASE_STUDIES = Literal[
+    'nmnist_cnn', 'nmnist_mlp',
+    'gesture_shallow', 'gesture_deep'
+]
 DEMO_DIR = os.path.dirname(__file__)
 WORK_DIR = os.path.join(DEMO_DIR, '..')
 
@@ -21,15 +25,9 @@ sfio.FIG_DIR = os.path.join(WORK_DIR, sfio.FIG_DIR)
 sfio.NET_DIR = os.path.join(WORK_DIR, sfio.NET_DIR)
 
 case_study = None
-dropout_en = None
-fyaml_name = None
-batch_size = None
-to_shuffle = None
 net_params = None
 shape_in = None
-
-device = torch.device('cuda')
-
+device = None
 _is_ready = False
 
 
@@ -38,43 +36,39 @@ def is_demo_ready():
 
 
 def prepare(
-        casestudy: Literal['nmnist-lenet', 'nmnist-deep', 'gesture'],
-        dropout: bool = False,
-        fyamlname=None,
-        batchsize=None,
-        shuffle=None
+        casestudy: SUPPORTED_CASE_STUDIES,
+        dev: torch.device = torch.device('cuda'),
+        fyamlname: str | None = None
 ):
-    global case_study, dropout_en, fyaml_name, batch_size
-    global to_shuffle, shape_in, _is_ready
+    global case_study, net_params, device
+    global shape_in, _is_ready
     global Dataset, Network
-    global net_params
 
-    if casestudy not in SUPPORTED_CASE_STUDIES:
+    if casestudy not in get_args(SUPPORTED_CASE_STUDIES):
         raise ValueError(f"Case study '{case_study}' not added. "
                          "Please modify file 'examples/demo/__init__.py'.")
 
     case_study = casestudy
-    dropout_en = dropout
+    device = dev
 
     if 'nmnist' in case_study:
         fyaml_name = fyamlname or 'nmnist.yaml'
-        batch_size = batchsize or 12
-        to_shuffle = shuffle if shuffle is not None else False
         shape_in = (2, 34, 34)
 
-        from demo.architectures.nmnist import NMNISTDataset as Dataset
-        if case_study == 'nmnist-lenet':
-            from demo.architectures.nmnist import LeNetNetwork as Network
-        elif case_study == 'nmnist-deep':
-            from demo.architectures.nmnist import NMNISTNetwork as Network
-    elif case_study == 'gesture':
+        from demo.architectures.nmnist import NmnistDataset as Dataset
+        if case_study == 'nmnist_cnn':
+            from demo.architectures.nmnist import NmnistCnn as Network
+        elif case_study == 'nmnist_mlp':
+            from demo.architectures.nmnist import NmnistMlp as Network
+    elif 'gesture' in case_study:
         fyaml_name = fyamlname or 'gesture.yaml'
-        batch_size = batchsize or 4
-        to_shuffle = shuffle if shuffle is not None else True
         shape_in = (2, 128, 128)
 
         from demo.architectures.gesture import GestureDataset as Dataset
-        from demo.architectures.gesture import GestureNetwork as Network
+        if case_study == 'gesture_shallow':
+            from demo.architectures.gesture import GestureShallow as Network
+        elif case_study == 'gesture_deep':
+            from demo.architectures.gesture import GestureDeep as Network
 
     net_params = snn.params(os.path.join(DEMO_DIR, f'config/{fyaml_name}'))
 
@@ -82,7 +76,7 @@ def prepare(
 
 
 def get_net(fpath: str = None, trial: int = None) -> 'Network':
-    net = Network(net_params, dropout_en).to(device)
+    net = Network(net_params).to(device)
     net_path = fpath or sfio.make_net_filepath(get_fnetname(trial))
     net.load_state_dict(torch.load(net_path, weights_only=True))
     net.eval()
@@ -90,22 +84,36 @@ def get_net(fpath: str = None, trial: int = None) -> 'Network':
     return net
 
 
-def get_dataset(train: bool) -> 'Dataset':
+def get_dataset(train: bool, transform: Callable | None = None) -> 'Dataset':
     return Dataset(
         root_dir=os.path.join(
             WORK_DIR, net_params['training']['path']['root_dir']
         ),
-        split='Train' if train else 'Test',
+        train=train,
         sampling_time=net_params['simulation']['Ts'],
-        sample_length=net_params['simulation']['tSample'])
+        sample_length=net_params['simulation']['tSample'],
+        transform=transform
+    )
 
 
-def get_loader(train: bool) -> DataLoader:
+def get_loader(
+        train: bool,
+        transform: Callable | None = None,
+        batch_size: int | None = 1,
+        shuffle: bool | None = None,
+        num_workers: int = 0,
+        collate_fn: Callable[[Iterable], Any] | None = None,
+        pin_memory: bool = False,
+        drop_last: bool = False
+) -> DataLoader:
     return DataLoader(
-        dataset=get_dataset(train),
+        dataset=get_dataset(train, transform),
         batch_size=batch_size,
-        shuffle=to_shuffle,
-        num_workers=4
+        shuffle=shuffle,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=pin_memory,
+        drop_last=drop_last
     )
 
 
@@ -115,16 +123,12 @@ def get_tiny_loader(size: int = 1) -> DataLoader:
     fields = list(zip(*batches))
     tensors = [torch.cat(field, dim=0) for field in fields]
 
-    return DataLoader(
-        TensorDataset(*tensors),
-        batch_size=batch_size,
-        shuffle=False
-    )
+    return DataLoader(TensorDataset(*tensors))
 
 
 def get_base_fname(train: bool = False) -> str:
     return (
-        f"{case_study}{'-do' if dropout_en else ''}{'_train' if train else ''}"
+        f"{case_study}{'_train' if train else ''}"
     )
 
 

@@ -1,20 +1,18 @@
 simulation:
-    Ts: 1.0
+    Ts: 1
     tSample: 300
-    nSample: 12
 neuron:
     type:     SRMALPHA
     theta:    10
-    tauSr:    10.0
-    tauRef:   1.0
-    scaleRef: 2     # relative to theta
-    tauRho:   1     # relative to theta #0.43429448190325176
+    tauSr:    10
+    tauRef:   1
+    scaleRef: 2
+    tauRho:   1
     scaleRho: 1
 training:
     error:
-        type: NumSpikes #ProbSpikes #NumSpikes
-        probSlidingWin: 20  # only valid for ProbSpikes
-        tgtSpikeRegion: {start: 0, stop: 300}    # only valid for NumSpikes and ProbSpikes
-        tgtSpikeCount: {true: 60, false: 10}    # only valid for NumSpikes
+        type: NumSpikes
+        tgtSpikeRegion: {start: 0, stop: 300}
+        tgtSpikeCount: {true: 60, false: 10}
     path:
         root_dir:   demo/datasets/NMNIST/

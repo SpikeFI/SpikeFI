@@ -1,18 +1,18 @@
 simulation:
-    Ts: 1.0
-    tSample: 1450
+    Ts: 4
+    tSample: 1500
 neuron:
     type:     SRMALPHA
     theta:    10
-    tauSr:    5.0
-    tauRef:   1.0
-    scaleRef: 2     # relative to theta
-    tauRho:   1     # relative to theta #0.43429448190325176
+    tauSr:    5
+    tauRef:   1
+    scaleRef: 2
+    tauRho:   1
     scaleRho: 1
 training:
     error:
-        type: NumSpikes #ProbSpikes #NumSpikes
-        tgtSpikeRegion: {start: 0, stop: 1450}    # only valid for NumSpikes and ProbSpikes
-        tgtSpikeCount: {true: 180, false: 30}    # only valid for NumSpikes
+        type: NumSpikes
+        tgtSpikeRegion: {start: 0, stop: 1500}
+        tgtSpikeCount: {true: 180, false: 30}
     path:
         root_dir:   demo/datasets/DVSGesture/
