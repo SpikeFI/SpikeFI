@@ -18,6 +18,7 @@
 
 
 import os
+from tonic import transforms
 import torch
 import spikefi as sfi
 from spikefi.models import (
@@ -31,13 +32,18 @@ import demo
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist-lenet', dropout=False)
+demo.prepare(casestudy='gesture_shallow')
 
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
 # Create a dataset loader for the testing set
-test_loader = demo.get_loader(train=False)
+test_loader = demo.get_loader(
+    train=False,
+    batch_size=8,
+    num_workers=4,
+    transform=transforms.Denoise(filter_time=10000)
+)
 
 # Create a SpikeFI Campaign object for network 'net'
 # Spiking-related information is configured by the 'net.slayer' object
