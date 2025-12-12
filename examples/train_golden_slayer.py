@@ -34,8 +34,7 @@ trial = demo.get_trial()
 train_loader = DataLoader(
     demo.get_dataset(
         train=True,
-        transform=transforms.Denoise(filter_time=10000),
-        exclude_other=True
+        transform=transforms.Denoise(filter_time=10000)
     ),
     batch_size=8, shuffle=True,
     num_workers=4, pin_memory=True,
@@ -44,8 +43,7 @@ train_loader = DataLoader(
 test_loader = DataLoader(
     demo.get_dataset(
         train=False,
-        transform=transforms.Denoise(filter_time=10000),
-        exclude_other=True
+        transform=transforms.Denoise(filter_time=10000)
     ),
     batch_size=4, shuffle=False,
     num_workers=4, pin_memory=True
@@ -67,6 +65,7 @@ scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer, step_size=20, gamma=0.5
 )
 
+# TODO: Replace slayer statistics with custom metric
 # Learning statistics
 stats = snn.utils.stats()
 
@@ -74,6 +73,7 @@ for epoch in range(epochs):
     tSt = datetime.now()
 
     # Training loop
+    net.train()
     for i, (input, label) in enumerate(train_loader, 0):
         input = input.to(demo.device, non_blocking=True)
         label = label.to(demo.device)
@@ -114,33 +114,38 @@ for epoch in range(epochs):
     # Testing loop
     # Same steps as in training loop except loss
     # backpropagation and weight update
-    for i, (input, label) in enumerate(test_loader, 0):
-        input = input.to(demo.device, non_blocking=True)
-        label = label.to(demo.device)
-        output = net.forward(input)
+    net.eval()
+    with torch.no_grad():
+        for i, (input, label) in enumerate(test_loader, 0):
+            input = input.to(demo.device, non_blocking=True)
+            label = label.to(demo.device)
+            output = net.forward(input)
 
-        stats.testing.correctSamples += torch.sum(
-            snn.predict.getClass(output) == label.cpu()
-        ).data.item()
-        stats.testing.numSamples += len(label)
+            stats.testing.correctSamples += torch.sum(
+                snn.predict.getClass(output) == label.cpu()
+            ).data.item()
+            stats.testing.numSamples += len(label)
 
-        # Create one-hot vector for labels
-        # target[b, label[b], 0, 0, 0] = 1
-        target = (
-            torch.zeros_like(output[..., :1])
-            .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
-        )
+            # Create one-hot vector for labels
+            # target[b, label[b], 0, 0, 0] = 1
+            target = (
+                torch.zeros_like(output[..., :1])
+                .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
+            )
 
-        loss = spike_loss.numSpikes(output, target)
-        stats.testing.lossSum += loss.cpu().data.item()
-        stats.print(epoch, i)
+            loss = spike_loss.numSpikes(output, target)
+            stats.testing.lossSum += loss.cpu().data.item()
+            stats.print(epoch, i)
 
     # Update stats
     stats.update()
 
     # Save the trained network instance with the best testing accuracy
     accu = np.asarray(stats.testing.accuracyLog, dtype=float)
-    if accu[epoch] >= np.nanmax(accu):
+    rev_i = np.nanargmax(accu[::-1])
+    last_max_epoch = accu.size - 1 - rev_i
+
+    if last_max_epoch == epoch:
         torch.save(
             net.state_dict(),
             sfio.make_net_filepath(demo.get_fnetname(trial))

@@ -8,7 +8,7 @@
 # is reported for each experiment and the results are stored in a file.     #
 # Continuing, the campaign object is reset and a new FI campaign is         #
 # initiated to perform the complete assessment of the network's output      #
-# layer by injected one bit-flipped synapse fault at the MSB of every        #
+# layer by injected one bit-flipped synapse fault at the MSB of every       #
 # synaptic weight of the layer. Then, the FI experiment targets each        #
 # synapse individually, meaning that only one synapse is faulty at a        #
 # time. Finally, results are plotted in a heat map and stored in a file.    #
@@ -20,6 +20,7 @@
 import os
 from tonic import transforms
 import torch
+from torch.utils.data import DataLoader
 import spikefi as sfi
 from spikefi.models import (
     DeadNeuron, StuckSynapse, ThresholdFaultNeuron, BitflippedSynapse
@@ -32,17 +33,21 @@ import demo
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='gesture_shallow')
+demo.prepare(casestudy='gesture')
 
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
 # Create a dataset loader for the testing set
-test_loader = demo.get_loader(
-    train=False,
-    batch_size=8,
+test_loader = DataLoader(
+    dataset=demo.get_dataset(
+        train=False,
+        transform=transforms.Denoise(filter_time=10000)
+    ),
+    shuffle=False,
+    batch_size=4,
     num_workers=4,
-    transform=transforms.Denoise(filter_time=10000)
+    pin_memory=True
 )
 
 # Create a SpikeFI Campaign object for network 'net'

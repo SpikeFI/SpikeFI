@@ -14,5 +14,5 @@ training:
         type: NumSpikes
         tgtSpikeRegion: {start: 0, stop: 300}
         tgtSpikeCount: {true: 60, false: 10}
-    path:
-        root_dir:   demo/datasets/NMNIST/
+path:
+    root_dir:   examples/demo/datasets/NMNIST/

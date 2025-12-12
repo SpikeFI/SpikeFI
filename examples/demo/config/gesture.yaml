@@ -14,5 +14,5 @@ training:
         type: NumSpikes
         tgtSpikeRegion: {start: 0, stop: 1500}
         tgtSpikeCount: {true: 180, false: 30}
-    path:
-        root_dir:   demo/datasets/DVSGesture/
+path:
+    root_dir:   examples/demo/datasets/DVSGesture/

@@ -11,18 +11,19 @@ from typing import Callable, get_args, Literal
 
 
 # TODO: Review and fix all examples after changes in the init file
+# TODO: Fix layer names according to the new architectures
 
 SUPPORTED_CASE_STUDIES = Literal[
     'nmnist_cnn', 'nmnist_mlp',
     'gesture'
 ]
 DEMO_DIR = os.path.dirname(__file__)
-WORK_DIR = os.path.join(DEMO_DIR, '..')
+EXMP_DIR = os.path.dirname(DEMO_DIR)
 
-sfio.OUT_DIR = os.path.join(WORK_DIR, sfio.OUT_DIR)
-sfio.RES_DIR = os.path.join(WORK_DIR, sfio.RES_DIR)
-sfio.FIG_DIR = os.path.join(WORK_DIR, sfio.FIG_DIR)
-sfio.NET_DIR = os.path.join(WORK_DIR, sfio.NET_DIR)
+sfio.OUT_DIR = os.path.join(EXMP_DIR, sfio.OUT_DIR)
+sfio.RES_DIR = os.path.join(EXMP_DIR, sfio.RES_DIR)
+sfio.FIG_DIR = os.path.join(EXMP_DIR, sfio.FIG_DIR)
+sfio.NET_DIR = os.path.join(EXMP_DIR, sfio.NET_DIR)
 
 case_study = None
 net_params = None
@@ -45,7 +46,7 @@ def prepare(
     global Dataset, Network
 
     if casestudy not in get_args(SUPPORTED_CASE_STUDIES):
-        raise ValueError(f"Case study '{case_study}' not added. "
+        raise ValueError(f"Case study '{casestudy}' not added. "
                          "Please modify file 'examples/demo/__init__.py'.")
 
     case_study = casestudy.lower()
@@ -67,15 +68,18 @@ def prepare(
         from demo.architectures.gesture import GestureDataset as Dataset
         from demo.architectures.gesture import GestureNet as Network
 
-    net_params = snn.params(os.path.join(DEMO_DIR, f'config/{fyaml_name}'))
+    net_params = snn.params(os.path.join(DEMO_DIR, "config", fyaml_name))
 
     _is_ready = True
 
 
 def get_net(fpath: str = None, trial: int = None) -> 'Network':
     net = Network(net_params).to(device)
+
     net_path = fpath or sfio.make_net_filepath(get_fnetname(trial))
-    net.load_state_dict(torch.load(net_path, weights_only=True))
+    net_state = torch.load(net_path, map_location=device)
+    net.load_state_dict(net_state)
+
     net.eval()
 
     return net
@@ -86,20 +90,20 @@ def get_dataset(
         transform: Callable | None = None,
         exclude_other: bool = False
 ) -> 'Dataset':
-    args = (
-        os.path.join(
-            WORK_DIR, net_params['training']['path']['root_dir']
+    kwargs = dict(
+        root_dir=os.path.join(
+            os.path.dirname(EXMP_DIR), net_params['path']['root_dir']
         ),
-        train,
-        net_params['simulation']['Ts'],
-        net_params['simulation']['tSample'],
-        transform
+        train=train,
+        sampling_time=net_params['simulation']['Ts'],
+        sample_length=net_params['simulation']['tSample'],
+        transform=transform
     )
 
     if 'gesture' in case_study:
-        args = (*args, exclude_other)
+        kwargs["exclude_other"] = exclude_other
 
-    return Dataset(*args)
+    return Dataset(**kwargs)
 
 
 def get_tiny_loader(size: int = 1) -> DataLoader:
