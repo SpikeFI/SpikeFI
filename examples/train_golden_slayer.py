@@ -9,8 +9,10 @@
 
 from datetime import datetime
 import matplotlib.pyplot as plt
+import numpy as np
 import pickle
 import torch
+from torch.utils.data import DataLoader
 from tonic import transforms
 import slayerSNN as snn
 import spikefi.utils.io as sfio
@@ -18,35 +20,41 @@ import demo
 
 
 # Number of training epochs
-E = 100
-TR = 408  # TODO: Restore auto-definition of trial
+epochs = 100
 
 # Setup the fault simulation demo environment
 # Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist_mlp', dev=torch.device('cuda:3'))
+demo.prepare(casestudy='gesture', dev=torch.device('cuda:3'))
 
 # Create a network instance
 net = demo.Network(demo.net_params).to(demo.device)
-# trial = demo.get_trial()
+trial = demo.get_trial()
 
 # Create the dataset loaders for the training and testing sets
-train_loader = demo.get_loader(
-    train=True,
+train_loader = DataLoader(
+    demo.get_dataset(
+        train=True,
+        transform=transforms.Denoise(filter_time=10000),
+        exclude_other=True
+    ),
     batch_size=8, shuffle=True,
     num_workers=4, pin_memory=True,
-    transform=transforms.Denoise(filter_time=10000)
+    persistent_workers=True
 )
-test_loader = demo.get_loader(
-    train=False,
+test_loader = DataLoader(
+    demo.get_dataset(
+        train=False,
+        transform=transforms.Denoise(filter_time=10000),
+        exclude_other=True
+    ),
     batch_size=4, shuffle=False,
-    num_workers=4, pin_memory=True,
-    transform=transforms.Denoise(filter_time=10000)
+    num_workers=4, pin_memory=True
 )
 
 print("Training configuration:")
 print(f"  - network: {demo.case_study}")
-print(f"  - epochs: {E}")
-print(f"  - trial: {TR}")
+print(f"  - epochs: {epochs}")
+print(f"  - trial: {trial}")
 print(f"  - Ts: {demo.net_params['simulation']['Ts']} ms")
 print()
 
@@ -62,7 +70,7 @@ scheduler = torch.optim.lr_scheduler.StepLR(
 # Learning statistics
 stats = snn.utils.stats()
 
-for epoch in range(E):
+for epoch in range(epochs):
     tSt = datetime.now()
 
     # Training loop
@@ -131,36 +139,37 @@ for epoch in range(E):
     stats.update()
 
     # Save the trained network instance with the best testing accuracy
-    if stats.testing.accuracyLog[-1] == stats.testing.maxAccuracy:
+    accu = np.asarray(stats.testing.accuracyLog, dtype=float)
+    if accu[epoch] >= np.nanmax(accu):
         torch.save(
             net.state_dict(),
-            sfio.make_net_filepath(demo.get_fnetname(TR))
+            sfio.make_net_filepath(demo.get_fnetname(trial))
         )
 
 # Save stats in a pickle file
 with open(
-    sfio.make_out_filepath(demo.get_fstaname(TR)), 'wb'
+    sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb'
 )as stats_file:
     pickle.dump(stats, stats_file)
 
 # Plot the training results (learning curves) and save in a .png file
 plt.figure()
 plt.plot(
-    range(1, E + 1),
+    range(1, epochs + 1),
     torch.Tensor(stats.training.accuracyLog) * 100., 'b--', label='Training'
 )
 plt.plot(
-    range(1, E + 1),
+    range(1, epochs + 1),
     torch.Tensor(stats.testing.accuracyLog) * 100., 'g-', label='Testing'
 )
 plt.xlabel('Epoch #')
 plt.ylabel('Accuracy (%)')
 plt.legend(loc='lower right')
-plt.xticks(ticks=[1] + list(range(10, E + 1, 10)))
-plt.xticks(ticks=range(2, E + 1, 2), minor=True)
+plt.xticks(ticks=[1] + list(range(10, epochs + 1, 10)))
+plt.xticks(ticks=range(2, epochs + 1, 2), minor=True)
 plt.yticks(ticks=range(0, 101, 10))
 plt.yticks(ticks=range(0, 100, 2), minor=True)
 plt.grid(visible=True, which='both', axis='both')
-plt.xlim((1, E))
+plt.xlim((1, epochs))
 plt.ylim((0., 100.))
-plt.savefig(sfio.make_fig_filepath(demo.get_ffigname(TR, format='png')))
+plt.savefig(sfio.make_fig_filepath(demo.get_ffigname(trial, format='png')))

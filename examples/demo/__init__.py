@@ -7,14 +7,14 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 import slayerSNN as snn
 import spikefi.utils.io as sfio
-from typing import Any, Callable, get_args, Iterable, Literal
+from typing import Callable, get_args, Literal
 
 
 # TODO: Review and fix all examples after changes in the init file
 
 SUPPORTED_CASE_STUDIES = Literal[
     'nmnist_cnn', 'nmnist_mlp',
-    'gesture_shallow', 'gesture_deep'
+    'gesture'
 ]
 DEMO_DIR = os.path.dirname(__file__)
 WORK_DIR = os.path.join(DEMO_DIR, '..')
@@ -48,7 +48,7 @@ def prepare(
         raise ValueError(f"Case study '{case_study}' not added. "
                          "Please modify file 'examples/demo/__init__.py'.")
 
-    case_study = casestudy
+    case_study = casestudy.lower()
     device = dev
 
     if 'nmnist' in case_study:
@@ -65,10 +65,7 @@ def prepare(
         shape_in = (2, 128, 128)
 
         from demo.architectures.gesture import GestureDataset as Dataset
-        if case_study == 'gesture_shallow':
-            from demo.architectures.gesture import GestureShallow as Network
-        elif case_study == 'gesture_deep':
-            from demo.architectures.gesture import GestureDeep as Network
+        from demo.architectures.gesture import GestureNet as Network
 
     net_params = snn.params(os.path.join(DEMO_DIR, f'config/{fyaml_name}'))
 
@@ -84,41 +81,29 @@ def get_net(fpath: str = None, trial: int = None) -> 'Network':
     return net
 
 
-def get_dataset(train: bool, transform: Callable | None = None) -> 'Dataset':
-    return Dataset(
-        root_dir=os.path.join(
-            WORK_DIR, net_params['training']['path']['root_dir']
-        ),
-        train=train,
-        sampling_time=net_params['simulation']['Ts'],
-        sample_length=net_params['simulation']['tSample'],
-        transform=transform
-    )
-
-
-def get_loader(
+def get_dataset(
         train: bool,
         transform: Callable | None = None,
-        batch_size: int | None = 1,
-        shuffle: bool | None = None,
-        num_workers: int = 0,
-        collate_fn: Callable[[Iterable], Any] | None = None,
-        pin_memory: bool = False,
-        drop_last: bool = False
-) -> DataLoader:
-    return DataLoader(
-        dataset=get_dataset(train, transform),
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        pin_memory=pin_memory,
-        drop_last=drop_last
+        exclude_other: bool = False
+) -> 'Dataset':
+    args = (
+        os.path.join(
+            WORK_DIR, net_params['training']['path']['root_dir']
+        ),
+        train,
+        net_params['simulation']['Ts'],
+        net_params['simulation']['tSample'],
+        transform
     )
+
+    if 'gesture' in case_study:
+        args = (*args, exclude_other)
+
+    return Dataset(*args)
 
 
 def get_tiny_loader(size: int = 1) -> DataLoader:
-    loader_iter = iter(get_loader(train=False))
+    loader_iter = iter(DataLoader(get_dataset(train=False)))
     batches = [next(loader_iter) for _ in range(size)]
     fields = list(zip(*batches))
     tensors = [torch.cat(field, dim=0) for field in fields]
