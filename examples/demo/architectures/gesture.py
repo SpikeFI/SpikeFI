@@ -12,13 +12,16 @@ class GestureDataset(torch.utils.data.Dataset):
             train: bool,
             sampling_time: int,
             sample_length: int,
-            transform: Callable | None = None
+            transform: Callable | None = None,
+            exclude_other: bool = False
     ) -> None:
         super().__init__()
 
         self.sampling_time = sampling_time
         self.sample_length = sample_length
         self.n_time_bins = int(sample_length / sampling_time)
+        self.exclude_other = exclude_other
+        self.train = train
 
         self.dataset = DVSGesture(
             save_to=os.path.abspath(os.path.join(root_dir, '..')),
@@ -26,11 +29,22 @@ class GestureDataset(torch.utils.data.Dataset):
             transform=transform
         )
 
+        if exclude_other:
+            # Label 10 corresponds to the 'other gestures' class
+            labels = self.dataset.targets
+            self.keep_indices = [
+                i for i, l in enumerate(labels) if l != 10
+            ]
+
     def __len__(self) -> int:
+        if self.exclude_other:
+            return len(self.keep_indices)
+
         return len(self.dataset)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        events, label = self.dataset[idx]
+        real_idx = self.keep_indices[idx] if self.exclude_other else idx
+        events, label = self.dataset[real_idx]
         sy, sx, sp = DVSGesture.sensor_size
 
         spikes_in = (
@@ -46,9 +60,15 @@ class GestureDataset(torch.utils.data.Dataset):
         return spikes_in, label
 
 
-class GestureShallow(torch.nn.Module):
-    def __init__(self, net_params: snn.params) -> None:
+class GestureNet(torch.nn.Module):
+    def __init__(
+            self,
+            net_params: snn.params,
+            exclude_other: bool = False
+     ) -> None:
         super().__init__()
+
+        n_out = 10 if exclude_other else 11
 
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
@@ -63,55 +83,13 @@ class GestureShallow(torch.nn.Module):
         self.SC2 = self.slayer.conv(32, 64, 3, padding=1, weightScale=20)
         self.SP2 = self.slayer.pool(2)
 
-        # Block 3: 64x8x8 -> 64x8x8
-        self.SC3 = self.slayer.conv(64, 64, 3, padding=1, weightScale=20)
-
-        # Block 4: 64x8x8 -> 256 -> 11
-        self.SF4a = self.slayer.dense((8, 8, 64), 256)
-        self.SF4b = self.slayer.dense(256, 11)
-
-    def forward(self, s_in: torch.Tensor) -> torch.Tensor:
-        s_out = self.slayer.spike(self.slayer.psp(self.SP0(s_in)))
-
-        s_out = self.slayer.spike(self.slayer.psp(self.SC1(s_out)))
-        s_out = self.slayer.spike(self.slayer.psp(self.SP1(s_out)))
-
-        s_out = self.slayer.spike(self.slayer.psp(self.SC2(s_out)))
-        s_out = self.slayer.spike(self.slayer.psp(self.SP2(s_out)))
-
-        s_out = self.slayer.spike(self.slayer.psp(self.SC3(s_out)))
-
-        s_out = self.slayer.spike(self.slayer.psp(self.SF4a(s_out)))
-        s_out = self.slayer.spike(self.slayer.psp(self.SF4b(s_out)))
-
-        return s_out
-
-
-class GestureDeep(torch.nn.Module):
-    def __init__(self, net_params: snn.params) -> None:
-        super().__init__()
-
-        self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
-
-        # Block 0: 2x128x128 -> 2x64x64
-        self.SP0 = self.slayer.pool(2)
-
-        # Block 1: 2x64x64 -> 32x32x32
-        self.SC1 = self.slayer.conv(2, 32, 5, padding=2, weightScale=10)
-        self.SP1 = self.slayer.pool(2)
-
-        # Block 2: 32x32x32 -> 64x16x16
-        self.SC2 = self.slayer.conv(32, 64, 3, padding=1, weightScale=20)
-        self.SP2 = self.slayer.pool(2)
-
-        # Block 3: 64x16x16 -> 128x8x8
+        # Block 3: 64x8x8 -> 128x4x4
         self.SC3 = self.slayer.conv(64, 128, 3, padding=1, weightScale=20)
         self.SP3 = self.slayer.pool(2)
 
-        # Block 4: 128x8x8 -> 1024 -> 256 -> 11
-        self.SF4a = self.slayer.dense((8, 8, 128), 512)
-        self.SD4 = self.slayer.dropout(0.5)
-        self.SF4b = self.slayer.dense(512, 11)
+        # Block 4: 128x4x4 -> 256 -> 11 | 10
+        self.SF4a = self.slayer.dense((4, 4, 128), 256)
+        self.SF4b = self.slayer.dense(256, n_out)
 
     def forward(self, s_in: torch.Tensor) -> torch.Tensor:
         s_out = self.slayer.spike(self.slayer.psp(self.SP0(s_in)))
@@ -126,61 +104,6 @@ class GestureDeep(torch.nn.Module):
         s_out = self.slayer.spike(self.slayer.psp(self.SP3(s_out)))
 
         s_out = self.slayer.spike(self.slayer.psp(self.SF4a(s_out)))
-        s_out = self.SD4(s_out)
         s_out = self.slayer.spike(self.slayer.psp(self.SF4b(s_out)))
 
         return s_out
-
-    # def __init__(self, net_params: snn.params) -> None:
-    #     super().__init__()
-
-    #     self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
-    #
-        # # Block 0: 2x128x128 -> 2x64x64
-        # self.SP0 = self.slayer.pool(2)
-
-        # # Block 1: 2x64x64 -> 32x32x32
-        # self.SC1a = self.slayer.conv(2, 32, 3, padding=1)
-        # self.SC1b = self.slayer.conv(32, 32, 3, padding=1)
-        # self.SP1 = self.slayer.pool(2)
-
-        # # Block 2: 32x32x32 -> 64x16x16
-        # self.SC2a = self.slayer.conv(32, 64, 3, padding=1)
-        # self.SC2b = self.slayer.conv(64, 64, 3, padding=1)
-        # self.SP2 = self.slayer.pool(2)
-
-        # # Block 3: 64x16x16 -> 128x8x8
-        # self.SC3a = self.slayer.conv(64, 128, 3, padding=1)
-        # self.SC3b = self.slayer.conv(128, 128, 3, padding=1)
-        # self.SP3 = self.slayer.pool(2)
-
-        # # Block 4: 128x8x8 -> 256x1x1
-        # self.SC4 = self.slayer.conv(128, 256, 3, padding=1)
-
-        # # Block 5: 256 - 128 - 11
-        # self.SF5a = self.slayer.dense(256, 128)
-        # self.SD5 = self.slayer.dropout(0.5)
-        # self.SF5b = self.slayer.dense(128, 11)
-
-    # def forward(self, s_in: torch.Tensor) -> torch.Tensor:
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SP0(s_in)))
-
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC1a(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC1b(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SP1(s_out)))
-
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC2a(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC2b(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SP2(s_out)))
-
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC3a(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC3b(s_out)))
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SP3(s_out)))
-
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SC4(s_out)))
-
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SF5a(s_out)))
-    #     s_out = self.SD5(s_out)
-    #     s_out = self.slayer.spike(self.slayer.psp(self.SF5b(s_out)))
-
-    #     return s_out
