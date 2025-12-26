@@ -32,7 +32,7 @@ trial = demo.get_trial()
 
 # Create the dataset loaders for the training and testing sets
 train_loader = DataLoader(
-    demo.get_dataset(
+    demo.get_cached_dataset(
         train=True,
         transform=transforms.Denoise(filter_time=10000)
     ),
@@ -41,7 +41,7 @@ train_loader = DataLoader(
     persistent_workers=True
 )
 test_loader = DataLoader(
-    demo.get_dataset(
+    demo.get_cached_dataset(
         train=False,
         transform=transforms.Denoise(filter_time=10000)
     ),
@@ -66,6 +66,8 @@ scheduler = torch.optim.lr_scheduler.StepLR(
 )
 
 # TODO: Replace slayer statistics with custom metric
+# TODO: Update training and testing loops
+
 # Learning statistics
 stats = snn.utils.stats()
 
@@ -76,68 +78,63 @@ for epoch in range(epochs):
     net.train()
     for i, (input, label) in enumerate(train_loader, 0):
         input = input.to(demo.device, non_blocking=True)
-        label = label.to(demo.device)
-        output = net.forward(input)
+        label = label.to(demo.device, non_blocking=True)
 
-        # Gather the training stats
-        stats.training.correctSamples += torch.sum(
-            snn.predict.getClass(output) == label.cpu()
-        ).data.item()
-        stats.training.numSamples += len(label)
+        optimizer.zero_grad()
 
-        # Create one-hot vector for labels
-        # target[b, label[b], 0, 0, 0] = 1
+        output = net(input)
+
+        # One-hot vector for labels: target[b, label[b], 0, 0, 0] = 1
         target = (
             torch.zeros_like(output[..., :1])
             .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
         )
 
-        # Calculate loss
         loss = spike_loss.numSpikes(output, target)
-
-        # Reset gradients to zero
-        optimizer.zero_grad()
-
-        # Backward pass
         loss.backward()
-
-        # Update weights
         optimizer.step()
 
-        # Gather training loss stats
-        stats.training.lossSum += loss.cpu().data.item()
-        # Display training stats
+        with torch.no_grad():
+            predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+            correct = (predict == label).sum().item()
+            batch_s = label.size(0)
+
+            stats.training.correctSamples += correct
+            stats.training.numSamples += batch_s
+
+            stats.training.lossSum += loss.detach().item() * batch_s
+
         stats.print(epoch, i, (datetime.now() - tSt).total_seconds())
 
     scheduler.step()
 
     # Testing loop
-    # Same steps as in training loop except loss
-    # backpropagation and weight update
     net.eval()
     with torch.no_grad():
         for i, (input, label) in enumerate(test_loader, 0):
             input = input.to(demo.device, non_blocking=True)
-            label = label.to(demo.device)
+            label = label.to(demo.device, non_blocking=True)
+
             output = net.forward(input)
 
-            stats.testing.correctSamples += torch.sum(
-                snn.predict.getClass(output) == label.cpu()
-            ).data.item()
-            stats.testing.numSamples += len(label)
-
-            # Create one-hot vector for labels
-            # target[b, label[b], 0, 0, 0] = 1
+            # One-hot vector for labels: target[b, label[b], 0, 0, 0] = 1
             target = (
                 torch.zeros_like(output[..., :1])
                 .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
             )
 
+            predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+            correct = (predict == label).sum().item()
+            batch_s = label.size(0)
+
+            stats.testing.correctSamples += correct
+            stats.testing.numSamples += batch_s
+
             loss = spike_loss.numSpikes(output, target)
-            stats.testing.lossSum += loss.cpu().data.item()
+            stats.testing.lossSum += loss.detach().item() * batch_s
+
             stats.print(epoch, i)
 
-    # Update stats
     stats.update()
 
     # Save the trained network instance with the best testing accuracy
@@ -154,7 +151,7 @@ for epoch in range(epochs):
 # Save stats in a pickle file
 with open(
     sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb'
-)as stats_file:
+) as stats_file:
     pickle.dump(stats, stats_file)
 
 # Plot the training results (learning curves) and save in a .png file

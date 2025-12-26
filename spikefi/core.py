@@ -695,7 +695,7 @@ class Campaign:
                 golden_spikes.append(
                     self.golden(golden_spikes[layer_idx], layer_idx, layer_idx)
                 )
-            golden_prediction = snn.predict.getClass(golden_spikes[-1])
+            golden_pred = golden_spikes[-1].sum(dim=(2, 3, 4)).argmax(dim=1)
 
             # For each fault round group
             for round_group in self.rgroups.values():
@@ -731,9 +731,9 @@ class Campaign:
                                 early_stop_next_out[~early_stop], es_idx + 2
                             )
 
-                    prediction = snn.predict.getClass(output)
+                    pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
                     N_critical[r_idx] += torch.sum(
-                        (golden_prediction == label) & (prediction != label)
+                        (golden_pred == label) & (pred != label)
                     )
 
                     self._advance_performance(
@@ -750,26 +750,31 @@ class Campaign:
             spike_loss: snn.loss | None = None,
             training: bool = False
     ) -> tuple[Tensor, int] | None:
-        perf = self.performance[self.r_idx_ref.r]
-        stat = perf.training if training else perf.testing
-
-        stat.correctSamples += torch.sum(
-            snn.predict.getClass(output) == label.cpu()
-        ).item()
-        stat.numSamples += len(label)
-
-        if spike_loss:
-            # Create one-hot vector for labels
-            # target[b, label[b], 0, 0, 0] = 1
+        if spike_loss is not None:
+            # One-hot vector for labels: target[b, label[b], 0, 0, 0] = 1
             target = (
                 torch.zeros_like(output[..., :1])
                 .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
             )
 
             loss = spike_loss.numSpikes(output, target)
-            stat.lossSum += loss.cpu().item()
 
-            return target, loss
+        with torch.no_grad():
+            perf = self.performance[self.r_idx_ref.r]
+            stat = perf.training if training else perf.testing
+
+            predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+            correct = (predict == label).sum().item()
+            batch_s = label.size(0)
+
+            stat.correctSamples += correct
+            stat.numSamples += batch_s
+
+            if spike_loss is not None:
+                stat.lossSum += loss.detach().item() * batch_s
+
+        if spike_loss is not None:
+            return loss, target
 
         return None
 
