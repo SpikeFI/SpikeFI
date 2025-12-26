@@ -5,6 +5,7 @@ __all__ = [
 import os
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+from tonic.cached_dataset import DiskCachedDataset
 import slayerSNN as snn
 import spikefi.utils.io as sfio
 from typing import Callable, get_args, Literal
@@ -12,6 +13,7 @@ from typing import Callable, get_args, Literal
 
 # TODO: Review and fix all examples after changes in the init file
 # TODO: Fix layer names according to the new architectures
+# TODO: Use cached dataset in the examples
 
 SUPPORTED_CASE_STUDIES = Literal[
     'nmnist_cnn', 'nmnist_mlp',
@@ -88,7 +90,7 @@ def get_net(fpath: str = None, trial: int = None) -> 'Network':
 def get_dataset(
         train: bool,
         transform: Callable | None = None,
-        exclude_other: bool = False
+        exclude_other: bool | None = None
 ) -> 'Dataset':
     kwargs = dict(
         root_dir=os.path.join(
@@ -101,9 +103,26 @@ def get_dataset(
     )
 
     if 'gesture' in case_study:
-        kwargs["exclude_other"] = exclude_other
+        kwargs["exclude_other"] = exclude_other or False
 
     return Dataset(**kwargs)
+
+
+def get_cached_dataset(
+    train: bool,
+    transform: Callable | None = None,
+    reset_cache: bool = False,
+    cache_path: str | None = None,
+    exclude_other: bool | None = None
+) -> DiskCachedDataset:
+    return DiskCachedDataset(
+        dataset=get_dataset(train, transform, exclude_other),
+        cache_path=cache_path or os.path.join(
+            os.path.dirname(EXMP_DIR), net_params['path']['root_dir'],
+            'cache', 'train' if train else 'test'
+        ),
+        reset_cache=reset_cache
+    )
 
 
 def get_tiny_loader(size: int = 1) -> DataLoader:

@@ -17,11 +17,13 @@ class GestureDataset(torch.utils.data.Dataset):
     ) -> None:
         super().__init__()
 
+        self.root_dir = root_dir
         self.sampling_time = sampling_time
         self.sample_length = sample_length
         self.n_time_bins = int(sample_length / sampling_time)
         self.exclude_other = exclude_other
         self.train = train
+        self.split = 'train' if train else 'test'
 
         self.dataset = DVSGesture(
             save_to=os.path.abspath(os.path.join(root_dir, '..')),

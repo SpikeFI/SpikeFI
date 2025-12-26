@@ -38,12 +38,17 @@ demo.prepare(casestudy='gesture')
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
+# The dataset is cached for faster loading
+# The transforms are applied before caching, so if changed,
+# the dataset needs to be cached again by passing 'reset_cache=True'.
+cached_dataset = demo.get_cached_dataset(
+    train=False,
+    transform=transforms.Denoise(filter_time=10000)
+)
+
 # Create a dataset loader for the testing set
 test_loader = DataLoader(
-    dataset=demo.get_dataset(
-        train=False,
-        transform=transforms.Denoise(filter_time=10000)
-    ),
+    dataset=cached_dataset,
     shuffle=False,
     batch_size=4,
     num_workers=4,
