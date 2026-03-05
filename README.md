@@ -15,7 +15,8 @@ Neuromorphic computing and spiking neural networks (SNNs) are gaining traction a
 
 ## Publication
 
-The article introducing *SpikeFI* has been submitted to IEEE for possible publication. A preprint version is available on arXiv [here](https://arxiv.org/abs/2412.06795).
+The article introducing *SpikeFI* has been submitted for possible publication. 
+A preprint version is available on arXiv [here](https://arxiv.org/abs/2412.06795).
 
 ### Citation
 
