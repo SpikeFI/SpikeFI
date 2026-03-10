@@ -11,10 +11,6 @@ import spikefi.utils.io as sfio
 from typing import Callable, get_args, Literal
 
 
-# TODO: Review and fix all examples after changes in the init file
-# TODO: Fix layer names according to the new architectures
-# TODO: Use cached dataset in the examples
-
 SUPPORTED_CASE_STUDIES = Literal[
     'nmnist_cnn', 'nmnist_mlp',
     'gesture'

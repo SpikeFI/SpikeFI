@@ -20,11 +20,10 @@ import demo
 
 
 # Number of training epochs
-epochs = 100
+epochs = 50
 
-# Setup the fault simulation demo environment
-# Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='gesture', dev=torch.device('cuda:3'))
+# Setup the fault simulation demo environment and select case study
+demo.prepare(casestudy='nmnist_mlp')
 
 # Create a network instance
 net = demo.Network(demo.net_params).to(demo.device)
@@ -36,17 +35,19 @@ train_loader = DataLoader(
         train=True,
         transform=transforms.Denoise(filter_time=10000)
     ),
-    batch_size=8, shuffle=True,
+    batch_size=16, shuffle=True,
     num_workers=4, pin_memory=True,
     persistent_workers=True
 )
+
 test_loader = DataLoader(
     demo.get_cached_dataset(
         train=False,
         transform=transforms.Denoise(filter_time=10000)
     ),
     batch_size=4, shuffle=False,
-    num_workers=4, pin_memory=True
+    num_workers=4, pin_memory=True,
+    persistent_workers=True
 )
 
 print("Training configuration:")
@@ -62,11 +63,8 @@ spike_loss = snn.loss(demo.net_params).to(demo.device)
 # Optimizer module
 optimizer = torch.optim.Adam(net.parameters(), lr=2e-3, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(
-    optimizer, step_size=20, gamma=0.5
+    optimizer, step_size=15, gamma=0.5
 )
-
-# TODO: Replace slayer statistics with custom metric
-# TODO: Update training and testing loops
 
 # Learning statistics
 stats = snn.utils.stats()
@@ -102,7 +100,7 @@ for epoch in range(epochs):
             stats.training.correctSamples += correct
             stats.training.numSamples += batch_s
 
-            stats.training.lossSum += loss.detach().item() * batch_s
+            stats.training.lossSum += loss.detach().item()
 
         stats.print(epoch, i, (datetime.now() - tSt).total_seconds())
 
@@ -110,7 +108,7 @@ for epoch in range(epochs):
 
     # Testing loop
     net.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         for i, (input, label) in enumerate(test_loader, 0):
             input = input.to(demo.device, non_blocking=True)
             label = label.to(demo.device, non_blocking=True)
@@ -131,7 +129,7 @@ for epoch in range(epochs):
             stats.testing.numSamples += batch_s
 
             loss = spike_loss.numSpikes(output, target)
-            stats.testing.lossSum += loss.detach().item() * batch_s
+            stats.testing.lossSum += loss.detach().item()
 
             stats.print(epoch, i)
 
@@ -148,11 +146,15 @@ for epoch in range(epochs):
             sfio.make_net_filepath(demo.get_fnetname(trial))
         )
 
+print("Best epoch: " + str(last_max_epoch))
+
 # Save stats in a pickle file
 with open(
     sfio.make_out_filepath(demo.get_fstaname(trial)), 'wb'
 ) as stats_file:
     pickle.dump(stats, stats_file)
+    pickle.dump(accu, stats_file)
+    pickle.dump(last_max_epoch, stats_file)
 
 # Plot the training results (learning curves) and save in a .png file
 plt.figure()

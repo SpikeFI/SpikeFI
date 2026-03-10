@@ -21,7 +21,9 @@
 
 
 import os
+from tonic import transforms
 import torch
+from torch.utils.data import DataLoader
 import slayerSNN as snn
 import spikefi as sfi
 from spikefi.utils.quantization import qargs_from_tensor
@@ -31,20 +33,27 @@ import demo
 # Configuration parameters for the bitflip FI experiments
 # Select one or more layers to target
 # (use an empty string '' to target the whole network)
-layers = ['SF2']    # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
+layers = ['SF4b']    # For example: 'SF4b', 'SF4a', 'SC3', 'SC2', 'SC1', ''
 # Select the bit positions to target
 bits = range(8)     # LSB is bit 0
 # Select the precision of the quantized integer synaptic weights
 qdtype = torch.quint8
 
-# Setup the fault simulation demo environment
-# Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist-lenet', dropout=False)
+# Setup the fault simulation demo environment and select case study
+demo.prepare(casestudy='nmnist_cnn')
 
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
+
 # Create a dataset loader for the testing set
-test_loader = demo.get_loader(train=False)
+test_loader = DataLoader(
+    demo.get_cached_dataset(
+        train=False,
+        transform=transforms.Denoise(filter_time=10000)
+    ),
+    batch_size=16, shuffle=False,
+    num_workers=4, pin_memory=True
+)
 
 # Calculate total number of FI campaigns
 cmpns_total = len(layers) * len(bits)
