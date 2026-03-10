@@ -1,5 +1,5 @@
 simulation:
-    Ts: 1
+    Ts: 6
     tSample: 300
 neuron:
     type:     SRMALPHA
