@@ -25,6 +25,10 @@ class GestureDataset(torch.utils.data.Dataset):
         self.train = train
         self.split = 'train' if train else 'test'
 
+        # Fixes tonic download issue with figshare links
+        DVSGesture.train_url = "https://ndownloader.figshare.com/files/38022171"
+        DVSGesture.test_url = "https://ndownloader.figshare.com/files/38020584"
+
         self.dataset = DVSGesture(
             save_to=os.path.abspath(os.path.join(root_dir, '..')),
             train=train,
