@@ -15,8 +15,7 @@ Neuromorphic computing and spiking neural networks (SNNs) are gaining traction a
 
 ## Publication
 
-The article introducing *SpikeFI* has been submitted for possible publication. 
-A preprint version is available on arXiv [here](https://arxiv.org/abs/2412.06795).
+The article introducing *SpikeFI* has been submitted for possible publication. A preprint version is available on arXiv [here](https://arxiv.org/abs/2412.06795).
 
 ### Citation
 
@@ -40,14 +39,14 @@ To cite our work, please use the following citation:
 This work was funded by the ANR RE-TRUSTING project under Grant No ANR-21-CE24-0015-03 and by the European Network of Excellence dAIEDGE under Grant Agreement No 101120726. The work of T. Spyrou was supported by the Sorbonne Center for Artificial Intelligence (SCAI) through Fellowship.
 
 
-## Requirements
+## Dependencies
 
-SpikeFI requires Python 3 and it has been tested to work with version 3.11 or newer.
+SpikeFI requires and has been tested to work with Python v3.11 or newer.
 
-The following packages are required to be installed before proceeding with using *SpikeFI*:
-- `pytorch` ≥ v2.1*
+The following packages are required for using *SpikeFI*:
+- `pytorch` ≥ v2.1
 - `matplotlib` ≥ v3.7
-- `numpy` ~= v1.26*
+- `numpy` ~= v1.26
 - `pyyaml` ≥ v6.0
 - `tqdm` ≥ v4.67
 - `cycler` ≥ v0.12
@@ -81,13 +80,7 @@ Install any version of `pytorch` from v2.1 onwards with the combination of the C
 
 For more information, please consult the get-started instructions on the PyTorch website [here](https://pytorch.org/get-started/locally).
 
-### 3. Install the requirements
-
-All the requirements are listed in the `requirements.txt` file. To install them you can use the following command (after switching to the SpikeFI main directory):
-
-`pip3 install -r requirements.txt`
-
-### 4. Install SLAYER
+### 3. Install SLAYER
 
 From __within the SLAYER directory__, run the following command:
 
@@ -95,7 +88,7 @@ From __within the SLAYER directory__, run the following command:
 
 For more information about the SLAYER framework, feel free to visit its GitHub page [here](https://github.com/bamsumit/slayerPytorch).
 
-### 5. Install SpikeFI
+### 4. Install SpikeFI
 
 Run the following command from SpikeFI directory to install the framework:
 
@@ -106,8 +99,7 @@ Run the following command from SpikeFI directory to install the framework:
 ``` bash
 git clone https://github.com/SpikeFI/SpikeFI.git
 git clone https://github.com/bamsumit/slayerPytorch.git
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-pip3 install -r ./SpikeFI/requirements.txt
+pip3 install torch torchvision torchaudio
 cd ./slayerPytorch/
 python3 setup.py install
 cd ../SpikeFI/
@@ -133,45 +125,9 @@ The *SpikeFI* package contains the following modules:
 
 *SpikeFI* is equipped with a `demo` package and a set of examples to easily get started and familiarize with its functionality.
 
-### Preparation
+### Pre-trained SNN models
 
-### 1. Install the demo requirements
-
-The `demo` package has some dependencies in addition to the `spikefi` package, which are listed in the `requirements_demo.txt` file in the examples directory. To install them you can use the following command from within the *SpikeFI* main directory:
-
-`pip3 install -r examples/requirements_demo.txt`
-
-### 2. Install the neuromorphic datasets
-
-To simplify and accelerate the get-started experience, `demo` is equipped with scripts that manage the setup of the dataset files, that is, converting them in the proper file format and arranging them in the needed directories.
-
-### <u>N-MNIST Dataset</u>
-
-To install the N-MNIST dataset, simply execute the following commands:
-
-```
-python3 examples/demo/setup_nmnist.py
-```
-
-`setup_nmnist` downloads the N-MNIST dataset files and extracts them using the `tonic` library and then places them under the proper directory hierarchy. The default setup location is set at `examples/demo/datasets/`, which can be modified by passing another directory path with the `--dir` argument. The `--force` argument, forces a clean installment of the dataset. Here follows an example of the full command:
-
-`python3 examples/demo/setup_nmnist.py [-h] [--force] [--dir DEST_DIR]
-
-### <u>IBM DVS128 Gesture Dataset</u>
-
-Installing the IBM DVS128 Gesture dataset follows a similar procedure as previously.
-
-```
-python3 examples/demo/setup_gesture.py
-```
-
-A full example of the `setup_gesture.py` script is as follows:
-
-`python3 examples/demo/setup_gesture.py [-h] [--force] [--dir DEST_DIR]`
-
-### Trained SNN models
-
-*SpikeFI* is delivered with a trained SNN model for each of the above datasets. The network architectures and dataset classes in PyTorch are located at `examples/demo/architectures` and the trained instances at `examples/demo/models`. The network configuration parameters, necessary for the SLAYER framework, can be found at `examples/demo/config`.
+*SpikeFI* is delivered with 3 pre-trained SNN models, namely, (i) `nmnist_mlp`, (ii) `nmnist_cnn`, and (iii) `gesture` networks. The network architectures and dataset classes in PyTorch can be found at `examples/demo/architectures` and the trained instances at `examples/demo/models`. The network configuration parameters, necessary for the SLAYER framework, can be found at `examples/demo/config`.
 
 ### Examples
 

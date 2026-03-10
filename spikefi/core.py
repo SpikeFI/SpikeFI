@@ -21,6 +21,7 @@ from enum import Enum
 from glob import glob
 from importlib.metadata import version
 from itertools import cycle, product
+import numpy as np
 import pickle
 import random
 from threading import Thread
@@ -30,6 +31,7 @@ from typing import Literal, Optional
 import torch
 from torch import nn, Tensor
 from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torch.utils.hooks import RemovableHandle
 
@@ -352,8 +354,10 @@ class Campaign:
             self,
             epochs: int,
             train_loader: DataLoader,
-            optimizer: Optimizer,
+            test_loader: DataLoader,
             spike_loss: snn.loss,
+            optimizer_factory: Callable[[Iterable], Optimizer],
+            scheduler_factory: Callable[[Optimizer], LRScheduler] | None = None,
             progress_mode: Literal[
                 'verbose', 'table', 'pbar', 'silent'
             ] | None = None
@@ -375,7 +379,13 @@ class Campaign:
             self.r_idx_ref.r = r_idx
             self.progress.step_round()
             self._evaluate_train(
-                faulty, epochs, train_loader, optimizer, spike_loss
+                faulty,
+                epochs,
+                train_loader,
+                test_loader,
+                spike_loss,
+                optimizer_factory,
+                scheduler_factory
             )
         self.progress.timer()
 
@@ -582,45 +592,64 @@ class Campaign:
             faulty: nn.Module,
             epochs: int,
             train_loader: DataLoader,
-            optimizer: Optimizer,
-            spike_loss: snn.loss
+            test_loader: DataLoader,
+            spike_loss: snn.loss,
+            optimizer_factory: Callable[[Iterable], Optimizer],
+            scheduler_factory: Callable[[Optimizer], LRScheduler] | None = None,
     ) -> None:
         stat = self.performance[self.r_idx_ref.r].training
 
-        # Create a new optimizer for network to be trained
-        # using the provided optimizer type and parameters
-        optimizer_class = type(optimizer)
-        optimizer_params = {
-            k: v
-            for param_group in optimizer.param_groups
-            for k, v in param_group.items()
-            if k != 'params'
-        }
-        optimizer_ = optimizer_class(faulty.parameters(), **optimizer_params)
+        optimizer_ = optimizer_factory(faulty.parameters())
+        has_scheduler = scheduler_factory is not None
+        scheduler_ = scheduler_factory(optimizer_) if has_scheduler else None
 
-        for _ in range(epochs):
+        for epoch in range(epochs):
             self.progress.step_epoch()
-            faulty.train()
 
-            for _, (_, input, target, label) in enumerate(train_loader):
+            # Training loop
+            faulty.train()
+            for input, label in train_loader:
                 self.progress.step_batch()
 
-                target = target.to(self.device)
                 output = faulty.forward(input.to(self.device))
 
-                loss = spike_loss.numSpikes(output, target)
+                loss, _ = self._advance_performance(
+                    output, label.to(self.device), spike_loss, training=True
+                )
+
                 optimizer_.zero_grad()
                 loss.backward()
                 optimizer_.step()
 
-                self._advance_performance(
-                    output, target, label, spike_loss, training=True
-                )
-
                 self.progress.set_train(stat.loss(), stat.accuracy())
                 self.progress.step()
 
+            if has_scheduler:
+                scheduler_.step()
+
+            # Testing loop
+            faulty.eval()
+            with torch.inference_mode():
+                for input, label in test_loader:
+                    output = faulty.forward(input.to(self.device))
+
+                    loss, _ = self._advance_performance(
+                        output, label.to(self.device), spike_loss, training=False
+                    )
+
             self.performance[self.r_idx_ref.r].update()
+
+            # Save the trained network instance with the best testing accuracy
+            accu = np.asarray(self.performance[self.r_idx_ref.r].testing.accuracyLog, dtype=float)
+            rev_i = np.nanargmax(accu[::-1])
+            last_max_epoch = accu.size - 1 - rev_i
+
+            if last_max_epoch == epoch:
+                best_state_dict = deepcopy(faulty.state_dict())
+
+        # At the end, restore the best model into net
+        if best_state_dict is not None:
+            faulty.load_state_dict(best_state_dict)
 
         # Final set of faulty synapses (if any)
         # Hooks are not removed from the final network
@@ -633,12 +662,13 @@ class Campaign:
             test_loader: DataLoader,
             spike_loss: snn.loss | None = None
     ) -> None:
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
             self.progress.step_batch()
+
             output = self.faulty(input.to(self.device))
 
             self._advance_performance(
-                output, target.to(self.device), label, spike_loss
+                output, label.to(self.device), spike_loss
             )
             self.progress.step()
 
@@ -661,7 +691,7 @@ class Campaign:
             spike_loss: snn.loss | None = None
     ) -> None:
         # For each batch
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
             self.progress.step_batch()
 
             # For each fault round group
@@ -670,10 +700,11 @@ class Campaign:
                 for r_idx in round_group:
                     self.r_idx_ref.r = r_idx
                     self.progress.step_round()
+
                     output = self.faulty(input.to(self.device))
 
                     self._advance_performance(
-                        output, target.to(self.device), label, spike_loss
+                        output, label.to(self.device), spike_loss
                     )
                     self.progress.step()
 
@@ -683,10 +714,11 @@ class Campaign:
             spike_loss: snn.loss | None = None,
             es_tol: int = 0
     ) -> Tensor:
-        N_critical = torch.zeros(len(self.rounds), dtype=torch.int)
+        N_critical = torch.zeros(len(self.rounds), dtype=torch.int, device=self.device)
 
         # For each batch
-        for _, (_, input, target, label) in enumerate(test_loader):
+        for input, label in test_loader:
+            label = label.to(self.device)
             self.progress.step_batch()
 
             # Store golden spikes
@@ -695,7 +727,7 @@ class Campaign:
                 golden_spikes.append(
                     self.golden(golden_spikes[layer_idx], layer_idx, layer_idx)
                 )
-            golden_prediction = snn.predict.getClass(golden_spikes[-1])
+            golden_pred = golden_spikes[-1].sum(dim=(2, 3, 4)).argmax(dim=1)
 
             # For each fault round group
             for round_group in self.rgroups.values():
@@ -731,13 +763,13 @@ class Campaign:
                                 early_stop_next_out[~early_stop], es_idx + 2
                             )
 
-                    prediction = snn.predict.getClass(output)
+                    pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
                     N_critical[r_idx] += torch.sum(
-                        (golden_prediction == label) & (prediction != label)
+                        (golden_pred == label) & (pred != label)
                     )
 
                     self._advance_performance(
-                        output, target.to(self.device), label, spike_loss
+                        output, label, spike_loss
                     )
                     self.progress.step()
 
@@ -746,20 +778,37 @@ class Campaign:
     def _advance_performance(
             self,
             output: Tensor,
-            target: Tensor,
             label: Tensor,
             spike_loss: snn.loss | None = None,
             training: bool = False
-    ) -> None:
-        perf = self.performance[self.r_idx_ref.r]
-        stat = perf.training if training else perf.testing
+    ) -> tuple[Tensor, int] | None:
+        if spike_loss is not None:
+            # One-hot vector for labels: target[b, label[b], 0, 0, 0] = 1
+            target = (
+                torch.zeros_like(output[..., :1])
+                .scatter_(1, label.view(-1, 1, 1, 1, 1), 1.0)
+            )
 
-        stat.correctSamples += torch.sum(
-            snn.predict.getClass(output) == label
-        ).item()
-        stat.numSamples += len(label)
-        if spike_loss:
-            stat.lossSum += spike_loss.numSpikes(output, target).cpu().item()
+            loss = spike_loss.numSpikes(output, target)
+
+        with torch.no_grad():
+            perf = self.performance[self.r_idx_ref.r]
+            stat = perf.training if training else perf.testing
+
+            predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+            correct = (predict == label).sum().item()
+            batch_s = label.size(0)
+
+            stat.correctSamples += correct
+            stat.numSamples += batch_s
+
+            if spike_loss is not None:
+                stat.lossSum += loss.detach().item()
+
+        if spike_loss is not None:
+            return loss, target
+
+        return None
 
     def export(self) -> 'CampaignData':
         return CampaignData(self)

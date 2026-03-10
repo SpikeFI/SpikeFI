@@ -8,7 +8,7 @@
 # is reported for each experiment and the results are stored in a file.     #
 # Continuing, the campaign object is reset and a new FI campaign is         #
 # initiated to perform the complete assessment of the network's output      #
-# layer by injected one bit-flipped synapse fault at the MSB of every        #
+# layer by injected one bit-flipped synapse fault at the MSB of every       #
 # synaptic weight of the layer. Then, the FI experiment targets each        #
 # synapse individually, meaning that only one synapse is faulty at a        #
 # time. Finally, results are plotted in a heat map and stored in a file.    #
@@ -18,7 +18,9 @@
 
 
 import os
+from tonic import transforms
 import torch
+from torch.utils.data import DataLoader
 import spikefi as sfi
 from spikefi.models import (
     DeadNeuron, StuckSynapse, ThresholdFaultNeuron, BitflippedSynapse
@@ -29,32 +31,45 @@ from spikefi.utils.quantization import qargs_from_tensor
 import demo
 
 
-# Setup the fault simulation demo environment
-# Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist-lenet', dropout=False)
+# Setup the fault simulation demo environment and select case study
+demo.prepare(casestudy='nmnist_cnn')
 
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
 
+# The dataset is cached for faster loading
+# The transforms are applied before caching, so if changed,
+# the dataset needs to be cached again by passing 'reset_cache=True'.
+cached_dataset = demo.get_cached_dataset(
+    train=False,
+    transform=transforms.Denoise(filter_time=10000)
+)
+
 # Create a dataset loader for the testing set
-test_loader = demo.get_loader(train=False)
+test_loader = DataLoader(
+    dataset=cached_dataset,
+    shuffle=False,
+    batch_size=16,
+    num_workers=4,
+    pin_memory=True
+)
 
 # Create a SpikeFI Campaign object for network 'net'
 # Spiking-related information is configured by the 'net.slayer' object
 cmpn = Campaign(net, demo.shape_in, net.slayer, name='basic-fi')
 
 # Create 3 different faults
-# Fault 'fx' is a Dead Neuron in layer SF2
+# Fault 'fx' is a Dead Neuron in the output layer
 fx = Fault(
     DeadNeuron(),
-    FaultSite('SF2')
+    FaultSite('SF4b')
 )
 # Fault 'fy' is a Stuck Synapse fault randomly placed in the network
 fy = Fault(
     StuckSynapse(100.)
 )
-# Fault 'fz' is a multiple neuron parametric threshold fault in layer SF1
-fz = Fault.multiple_random_absolute(ThresholdFaultNeuron(3.), 4, 'SF1')
+# Fault 'fz' is a multiple neuron parametric threshold fault in the penultimate layer
+fz = Fault.multiple_random_absolute(ThresholdFaultNeuron(3.), 4, 'SF4a')
 
 # Round 0: Inject fault fx (single-fault scenario)
 cmpn.inject(fx)
@@ -77,16 +92,15 @@ cmpn.save()
 cmpn.eject()
 
 # Find scale and zero point for the quantization of the synaptic weights
-# of layer 'SF2'
-W = getattr(net, 'SF2').weight
+W = getattr(net, 'SF4b').weight
 scale, zero_point = qargs_from_tensor(W, torch.quint8)
 
 # Create fault model 'fm' to be a Bitflipped Synapse with 8-bit quantized
 # integer synaptic weights, targeting the bit 7 (MSB) to be flipped
 fm = BitflippedSynapse(7, scale, zero_point, torch.quint8)
-# Inject a bit-flipped synapse fault to
-# every synapse of layer 'SF2', one at a time
-cmpn.inject_complete(fm, ['SF2'])
+# Inject a bit-flipped synapse fault to every
+# synapse between the two last layers, one at a time
+cmpn.inject_complete(fm, ['SF4b'], fault_sampling_k=100)
 
 # Execute the fault injection experiments targeting the synapses
 # of whole layer, when only one is faulty at a time
@@ -106,10 +120,10 @@ fig = sfi.visual.heat(
     title_suffix=demo.case_study
 )
 
-# Save the campaign and its results to 'out -> res -> bitflip_7_SF2.pkl'
+# Save the campaign and its results to 'out -> res -> bitflip_7_SF4b.pkl'
 cmpn.save(
     sfi.utils.io.make_res_filepath(
-        demo.case_study + '_bitflip_7_SF2',
+        demo.case_study + '_bitflip_7_SF4b',
         rename=True
     )
 )

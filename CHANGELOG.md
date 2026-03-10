@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] – 2026-03-10
+
+### Added
+- Integrate `tonic` for automated dataset installation and loading, replacing previous manual dataset setup scripts ([5376c85](https://github.com/SpikeFI/SpikeFI/commit/5376c85), [85f88ec](https://github.com/SpikeFI/SpikeFI/commit/85f88ec))
+- Add progress mode literals and allow passing the device as argument in `Campaign` ([b87b283](https://github.com/SpikeFI/SpikeFI/commit/b87b283))
+- Add cached dataset support to accelerate dataset loading in repeated experiments ([52f3a58](https://github.com/SpikeFI/SpikeFI/commit/52f3a58))
+
+### Changed
+- Update network architectures and training setup; remove legacy dataset setup scripts and rely on dynamic dataset loading ([5376c85](https://github.com/SpikeFI/SpikeFI/commit/5376c85))
+- Update gesture SNN architecture and add support for excluding the `"other"` class from the DVSGesture dataset ([2fc07f0](https://github.com/SpikeFI/SpikeFI/commit/2fc07f0))
+- Improve training and testing loops and update statistics handling ([39bc5df](https://github.com/SpikeFI/SpikeFI/commit/39bc5df))
+- Update training functionality and training pipeline for improved workflow and flexibility ([a62a47d](https://github.com/SpikeFI/SpikeFI/commit/a62a47d))
+- Update examples to reflect the new dataset handling and cached loading mechanisms ([8623c52](https://github.com/SpikeFI/SpikeFI/commit/8623c52))
+
+### Updated
+- Update trained models and checkpoints for the gesture SNN architecture ([954c809](https://github.com/SpikeFI/SpikeFI/commit/954c809), [3f70662](https://github.com/SpikeFI/SpikeFI/commit/3f70662), [a08c093](https://github.com/SpikeFI/SpikeFI/commit/a08c093))
+
+### Fixed
+- Fix saving of the best-performing network during training and remove unused `get_loader` function from demo ([ca4f89c](https://github.com/SpikeFI/SpikeFI/commit/ca4f89c))
+- Fix network loading and storing issues and update `train_golden_slayer` example ([7802418](https://github.com/SpikeFI/SpikeFI/commit/7802418))
+- Fix DVSGesture dataset download issue when using `tonic` ([5c527e4](https://github.com/SpikeFI/SpikeFI/commit/5c527e4))
+
 ## [1.2.0] – 2025-12-02
 
 ### Added

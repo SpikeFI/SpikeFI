@@ -15,7 +15,12 @@
 #############################################################################
 
 
+from collections.abc import Iterable
+from tonic import transforms
 import torch
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
+from torch.utils.data import DataLoader
 import slayerSNN as snn
 import spikefi as sfi
 from spikefi.fault import Fault
@@ -44,13 +49,47 @@ def get_range_str(r: range):
     return f"{start}-{stop}-{step}"
 
 
-# Setup the fault simulation demo environment
-# Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist-lenet', dropout=False)
+# Setup the fault simulation demo environment and select case study
+demo.prepare(casestudy='nmnist_cnn')
 
 # Create a network instance
 # (or load a trained one to perform re-training with faults)
-net = demo.Network(demo.net_params, demo.dropout_en).to(demo.device)
+net = demo.Network(demo.net_params).to(demo.device)
+
+# Create the dataset loaders for the training and testing sets
+train_loader = DataLoader(
+    demo.get_cached_dataset(
+        train=True,
+        transform=transforms.Denoise(filter_time=10000)
+    ),
+    batch_size=16, shuffle=True,
+    num_workers=4, pin_memory=True,
+    persistent_workers=True
+)
+
+test_loader = DataLoader(
+    demo.get_cached_dataset(
+        train=False,
+        transform=transforms.Denoise(filter_time=10000)
+    ),
+    batch_size=4, shuffle=False,
+    num_workers=4, pin_memory=True,
+    persistent_workers=True
+)
+
+# SNN loss
+spike_loss = snn.loss(demo.net_params).to(demo.device)
+
+
+# Optimizer factory
+def make_optimizer(params: Iterable) -> Optimizer:
+    return torch.optim.Adam(params, lr=2e-3, weight_decay=1e-4)
+
+
+# Scheduler factory
+def make_scheduler(optimizer: Optimizer) -> LRScheduler:
+    return torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
+
 
 # Initialize the campaign object
 fm_name = f_model.get_name_snake_case(delimiter='-')
@@ -83,9 +122,11 @@ cmpn.rounds.pop(0)
 # (train a new network instance for each fault round)
 faulties = cmpn.run_train(
     n_epochs,
-    demo.get_loader(train=True),
-    optimizer=torch.optim.Adam(net.parameters(), lr=learn_r, amsgrad=True),
-    spike_loss=snn.loss(demo.net_params).to(demo.device)
+    train_loader,
+    test_loader,
+    spike_loss,
+    make_optimizer,
+    make_scheduler
 )
 
 # Save trained networks

@@ -26,6 +26,7 @@ from copy import copy
 import csv
 import numpy as np
 import os
+from tonic import transforms
 from torch.utils.data import DataLoader
 import slayerSNN as snn
 import spikefi as sfi
@@ -37,7 +38,7 @@ import demo
 f_model = sfi.fm.DeadNeuron()
 # Select one or more layers to target
 # (use an empty string '' to target the whole network)
-layers = ['SF2']  # For example: 'SF2', 'SF1', 'SC3', 'SC2', 'SC1', ''
+layers = ['SF4b']    # For example: 'SF4b', 'SF4a', 'SC3', 'SC2', 'SC1', ''
 # Select the batch size(s)
 s_batch = [10, 1]
 # Select the number(s) of faults
@@ -49,12 +50,17 @@ opts = [4, 0]
 # Set the tolerance for the Early Stop optimization (if applied)
 es_tol = [0, 2]  # For example: range(71)
 
-# Setup the fault simulation demo environment
-# Selects the case study, e.g., the LeNet network without dropout
-demo.prepare(casestudy='nmnist-lenet', dropout=False)
+# Setup the fault simulation demo environment and select case study
+demo.prepare(casestudy='nmnist_cnn')
 
 # Load the network
 net = demo.get_net(os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname()))
+
+# The dataset is cached for faster loading
+cached_dataset = demo.get_cached_dataset(
+    train=False,
+    transform=transforms.Denoise(filter_time=10000)
+)
 
 # Calculate total number of FI campaigns
 cmpns_count = 0
@@ -82,9 +88,9 @@ for lay_name in layers:
             # Create a dataset loader for the testing set
             # with the targeted batch size
             test_loader = DataLoader(
-                dataset=demo.get_dataset(train=False),
-                batch_size=bs,
-                shuffle=demo.to_shuffle
+                cached_dataset,
+                batch_size=bs, shuffle=False,
+                num_workers=4, pin_memory=True
             )
 
             # For each targeted optimization
