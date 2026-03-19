@@ -930,7 +930,7 @@ class NeuronHook:
             return
 
         for fault in self.faults:
-            all_ind = fault.unroll()
+            idx = (slice(None), *fault.unroll(), slice(None))
             fspike_out = fault.model.unstore()
             fm_args = (
                 (fspike_out,)
@@ -938,17 +938,17 @@ class NeuronHook:
                 else fault.model.args
             )
 
-            prev_spikes_out[:, *all_ind, :] = fault.model.perturb(
-                prev_spikes_out[:, *all_ind, :], *fm_args
+            prev_spikes_out[idx] = fault.model.perturb(
+                prev_spikes_out[idx], *fm_args
             )
 
     def _neuron_param_hook(self, _, __, spikes_out: Tensor) -> None:
         for fault in self.faults:
-            all_ind = fault.unroll()
+            idx = (slice(None), *fault.unroll(), slice(None))
 
             flayer = fault.model.flayer
             fspike_out = flayer.spike(flayer.psp(spikes_out))
-            fault.model.store(fspike_out[:, *all_ind, :])
+            fault.model.store(fspike_out[idx])
 
 
 class SynapseHook:
@@ -972,11 +972,11 @@ class SynapseHook:
             all_ind = fault.unroll()
             with torch.no_grad():
                 if self.hook_type == "pre":
-                    layer.weight[*all_ind] = fault.model.perturb_store(
-                        layer.weight[*all_ind]
+                    layer.weight[all_ind] = fault.model.perturb_store(
+                        layer.weight[all_ind]
                     )
                 elif self.hook_type == "post":
-                    layer.weight[*all_ind] = fault.model.restore()
+                    layer.weight[all_ind] = fault.model.restore()
 
     @staticmethod
     def generate(
