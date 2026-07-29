@@ -364,7 +364,7 @@ class Campaign:
     ) -> list[nn.Module]:
         # Initialize and refresh progress
         self.progress = CampaignProgress(
-            len(train_loader), len(self.rounds), epochs
+            len(train_loader), len(self.rounds), epochs, progress_mode
         )
         self._progress_thread = Thread(
             target=refresh_progress_job,
@@ -419,7 +419,9 @@ class Campaign:
         self._pre_run(opt)
 
         # Initialize and refresh progress
-        self.progress = CampaignProgress(len(test_loader), len(self.rounds))
+        self.progress = CampaignProgress(
+            len(test_loader), len(self.rounds), mode=progress_mode
+        )
         self._progress_thread = Thread(
             target=refresh_progress_job,
             args=(self.progress, 0.1, progress_mode, ),

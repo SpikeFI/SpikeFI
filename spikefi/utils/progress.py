@@ -29,8 +29,17 @@ class CampaignProgress:
             self,
             batches_num: int,
             rounds_num: int,
-            epochs_num: int | None = None
+            epochs_num: int | None = None,
+            mode: Literal['verbose', 'table', 'pbar', 'silent'] | None = None
     ) -> None:
+        if not mode:
+            try:
+                get_ipython()  # type: ignore
+                mode = 'pbar'
+            except NameError:
+                mode = 'verbose'
+        self.mode = mode
+
         self.is_training = bool(epochs_num)
         self.loss = 0.
         self.accu = 0.
@@ -47,7 +56,11 @@ class CampaignProgress:
         self.start_time = 0.
         self.end_time = 0.
 
-        self.pbar = tqdm(total=self.iter_num, leave=False)
+        self.pbar = tqdm(
+            total=self.iter_num,
+            leave=False,
+            disable=self.mode not in ('verbose', 'pbar')
+        )
 
         self._flush_lines_num = 0
         self._loading_bar = cycle(['-', '-', '\\', '\\', '|', '|', '/', '/'])
@@ -125,12 +138,7 @@ class CampaignProgress:
             self,
             mode: Literal['verbose', 'table', 'pbar', 'silent'] | None = None
     ) -> None:
-        if not mode:
-            try:
-                get_ipython()  # type: ignore
-                mode = 'pbar'
-            except NameError:
-                mode = 'verbose'
+        mode = mode or self.mode
 
         if mode == 'verbose':
             self._show_table()
