@@ -143,9 +143,7 @@ class ParametricNeuronFaultModel(FaultModel):
         dummy = deepcopy(slayer)
         dummy.neuron[self.param_name] = self.param_perturbed
 
-        self.flayer = spikeLayer(
-            dummy.neuron, dummy.simulation, fullRefKernel=True
-        ).to(device)
+        self.flayer = spikeLayer(dummy.neuron, dummy.simulation).to(device)
 
     def param_restore(self) -> None:
         self.flayer.neuron[self.param_name] = self.param_original

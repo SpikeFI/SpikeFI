@@ -512,23 +512,24 @@ class Campaign:
             if round.any_neuronal(layer_name):
                 # Parametric faults (subset of neuronal faults)
                 if round.any_parametric(layer_name):
-                    for fault in round.search_parametric(layer_name):
+                    param_faults = round.search_parametric(layer_name)
+                    for fault in param_faults:
                         # Create parametric faults' dummy layers
                         fault.model.param_perturb(self.slayer, self.device)
 
-                        # Register parametric neuron fault hooks
-                        # (on the faulty layer)
-                        hook = NeuronHook(
-                            hook_type='param',
-                            faults=round.search_parametric(layer_name),
-                            active_round_idx=r,
-                            actual_round_idx=self.r_idx_ref,
-                            layer_shape=self.layers_info.shapes_neu[layer_name]
-                        )
+                    # Register parametric neuron fault hooks
+                    # (on the faulty layer)
+                    hook = NeuronHook(
+                        hook_type='param',
+                        faults=param_faults,
+                        active_round_idx=r,
+                        actual_round_idx=self.r_idx_ref,
+                        layer_shape=self.layers_info.shapes_neu[layer_name]
+                    )
 
-                        self.handles[layer_name][ind_neu][1].append(
-                            layer.register_forward_hook(hook)
-                        )
+                    self.handles[layer_name][ind_neu][1].append(
+                        layer.register_forward_hook(hook)
+                    )
 
                 # Neuronal faults for last layer are evaluated on
                 # a 'tail' layer that does nothing
@@ -948,9 +949,13 @@ class NeuronHook:
         for fault in self.faults:
             idx = (slice(None), *fault.unroll(), slice(None))
 
+            # Evaluate the dummy layer only on the fault sites
+            val_site = spikes_out[idx]
+            b, s, d = val_site.shape
+
             flayer = fault.model.flayer
-            fspike_out = flayer.spike(flayer.psp(spikes_out))
-            fault.model.store(fspike_out[idx])
+            fspike_out = flayer.spike(flayer.psp(val_site.reshape(b, s, 1, 1, d)))
+            fault.model.store(fspike_out.reshape(b, s, d))
 
 
 class SynapseHook:
