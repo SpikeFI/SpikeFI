@@ -75,6 +75,19 @@ cmpns_total = (
     )
 )
 
+# Create a dataset loader for the testing set
+# with the targeted batch size
+# Share the dataset loader if there is a unique batch size selected
+share_loader = len(s_batch) == 1
+if share_loader:
+    test_loader = DataLoader(
+        cached_dataset,
+        shuffle=False,
+        batch_size=s_batch[0],
+        num_workers=0,
+        pin_memory=True
+    )
+
 # For each targeted layer
 for lay_name in layers:
     rounds = []  # Accumulated fault injection rounds
@@ -85,13 +98,14 @@ for lay_name in layers:
 
         # For each targeted batch size
         for bs in s_batch:
-            # Create a dataset loader for the testing set
-            # with the targeted batch size
-            test_loader = DataLoader(
-                cached_dataset,
-                batch_size=bs, shuffle=False,
-                num_workers=4, pin_memory=True
-            )
+            if not share_loader:
+                test_loader = DataLoader(
+                    cached_dataset,
+                    shuffle=False,
+                    batch_size=bs,
+                    num_workers=0,
+                    pin_memory=True
+                )
 
             # For each targeted optimization
             for o in opts:
