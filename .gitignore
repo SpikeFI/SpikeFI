@@ -132,6 +132,10 @@ dmypy.json
 .vscode/
 *.code-workspace
 
+# Claude
+.claude/
+CLAUDE.md
+
 # Datasets
 datasets*/
 datasets
