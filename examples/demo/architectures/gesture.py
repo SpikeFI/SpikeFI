@@ -74,8 +74,7 @@ class GestureNet(torch.nn.Module):
      ) -> None:
         super().__init__()
 
-        n_out = 10 if exclude_other else 11
-
+        self.classes_out = 10 if exclude_other else 11
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
         # Block 0: 2x128x128 -> 2x32x32
@@ -95,7 +94,7 @@ class GestureNet(torch.nn.Module):
 
         # Block 4: 128x4x4 -> 256 -> 11 | 10
         self.SF4a = self.slayer.dense((4, 4, 128), 256)
-        self.SF4b = self.slayer.dense(256, n_out)
+        self.SF4b = self.slayer.dense(256, self.classes_out)
 
     def forward(self, s_in: torch.Tensor) -> torch.Tensor:
         s_out = self.slayer.spike(self.slayer.psp(self.SP0(s_in)))

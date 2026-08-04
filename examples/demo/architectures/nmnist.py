@@ -53,6 +53,7 @@ class NmnistCnn(torch.nn.Module):
     def __init__(self, net_params: snn.params) -> None:
         super().__init__()
 
+        self.classes_out = 10
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
         # Block 1: 2x34x34 -> 24x17x17
@@ -91,6 +92,7 @@ class NmnistMlp(torch.nn.Module):
     def __init__(self, net_params: snn.params) -> None:
         super().__init__()
 
+        self.classes_out = 10
         self.slayer = snn.layer(net_params['neuron'], net_params['simulation'])
 
         # 2x34x34 -> 512 -> 512 -> 10
