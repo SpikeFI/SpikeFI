@@ -1,5 +1,5 @@
 __all__ = [
-    "architectures", "Dataset", "Network"
+    "architectures", "benchmarks"
 ]
 
 import os
