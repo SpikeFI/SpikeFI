@@ -120,12 +120,19 @@ class FaultModel:
             self,
             target: FaultTarget,
             method: Callable[..., float | Tensor],
-            *args
+            *args,
+            persistent: bool = True
     ) -> None:
         assert len(target) == 1, 'Fault Model must have exactly 1 Fault Target'
         self.target = target
         self.method = method
         self.args = args
+        # Persistent: whether the fault must be continuously re-enforced
+        # against external changes, as opposed to a one-shot event applied
+        # once and training then adapts around it freely, like any other
+        # weight. Applies only to soft synapse faults
+        # (e.g., Bitflipped Synapse and Perturbed Synapse).
+        self.persistent: bool = persistent
 
         self.original: float | Tensor = None
         self.perturbed: float | Tensor = None
@@ -182,28 +189,42 @@ class FaultModel:
     def perturb(self, original: float | Tensor, *new_args) -> float | Tensor:
         return self.method(original, *(new_args or self.args))
 
-    def perturb_store(self, original: float | Tensor) -> float | Tensor:
+    def perturb_store(
+            self,
+            original: float | Tensor,
+            clean: bool = False
+    ) -> float | Tensor:
+        if not clean and self.is_perturbed():
+            unchanged = (
+                torch.equal(self.original, original)
+                if isinstance(original, Tensor)
+                else self.original == original
+            )
+            if unchanged:
+                return self.perturbed
+
         self.original = original
-        self.perturbed = self.perturb(original)
+        self.store(self.perturb(original))
 
         return self.perturbed
 
-    def restore(self) -> float | Tensor:
-        self.perturbed = None
+    def restore(self, clean: bool = False) -> float | Tensor:
         original = self.original
+
+        if clean:
+            self.perturbed = None
+            self.original = None
 
         return original
 
     def store(self, perturbed: float | Tensor) -> None:
         self.perturbed = perturbed
 
-        return
-
     def unstore(self) -> float | Tensor:
-        tore = self.perturbed
+        perturbed = self.perturbed
         self.perturbed = None
 
-        return tore
+        return perturbed
 
 
 class Fault:

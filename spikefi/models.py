@@ -318,7 +318,7 @@ class PerturbedSynapse(FaultModel):
             if percentage is not None
             else random.uniform(0.1, 3.0)
         )
-        super().__init__(FaultTarget.WEIGHT, mul_value, rho)
+        super().__init__(FaultTarget.WEIGHT, mul_value, rho, persistent=False)
 
 
 class BitflippedSynapse(FaultModel):
@@ -330,7 +330,8 @@ class BitflippedSynapse(FaultModel):
             dtype: torch.dtype
     ):
         super().__init__(
-            FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype
+            FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype,
+            persistent=False
         )
 
 
