@@ -22,23 +22,21 @@ class BenchmarkA(Benchmark):
 
     def __init__(
         self,
-        *,
         casestudy: demo.SUPPORTED_CASE_STUDIES,
+        session_id: int,
+        n_reps: int,
+        n_warmup: int,
         layers: list[str],
         batch_size: int,
-        n_reps: int,
         golden_on: bool,
-        session_id: int,
-        syn_n_time_bins: int,
-        n_warmup: int = 3,
-        use_synthetic: bool = True,
+        use_synthetic: bool,
         syn_n_batches: int,
+        syn_n_time_bins: int,
         subset_div: int = 1
     ) -> None:
         super().__init__(
-            casestudy=casestudy, session_id=session_id, n_reps=n_reps,
-            n_warmup=n_warmup, use_synthetic=use_synthetic,
-            syn_n_batches=syn_n_batches, subset_div=subset_div
+            casestudy, session_id, n_reps, n_warmup,
+            use_synthetic, syn_n_batches, subset_div
         )
 
         self.layers = layers
@@ -55,14 +53,15 @@ class BenchmarkA(Benchmark):
     ) -> dict[str, object]:
         return dict(
             casestudy=info.casestudy,
+            session_id=info.session_id,
+            n_reps=info.n_reps,
+            n_warmup=int((df.kind == 'warmup').sum()),
             layers=set(faulty['layer']),
             batch_size=int(df['batch_size'].iloc[0]),
-            n_reps=info.n_reps,
             golden_on=bool((df.kind == 'golden').any()),
-            session_id=info.session_id,
-            syn_n_time_bins=int(df['time_bins'].iloc[0]),
             use_synthetic=info.use_synthetic,
-            syn_n_batches=info.n_batches
+            syn_n_batches=info.n_batches,
+            syn_n_time_bins=int(df['time_bins'].iloc[0])
         )
 
     def _render_plot(

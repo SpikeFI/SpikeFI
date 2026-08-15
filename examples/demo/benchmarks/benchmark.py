@@ -41,9 +41,9 @@ COLORS = colormaps['Paired'].colors
 
 @dataclass
 class OverheadData:
-    means: pd.DataFrame  # 't_setup', 't_setup_wall', 't_exec' per (kind, ftype, layer), pre-normalization
-    abs_ovh: pd.DataFrame  # 't_setup', 't_setup_wall', 't_exec'
-    abs_std: pd.DataFrame  # 't_setup', 't_setup_wall', 't_exec'
+    means: pd.DataFrame
+    abs_ovh: pd.DataFrame
+    abs_std: pd.DataFrame
     ftypes_active: set[str]
 
 
@@ -77,12 +77,11 @@ class Benchmark(ABC):
 
     def __init__(
         self,
-        *,
         casestudy: demo.SUPPORTED_CASE_STUDIES,
         session_id: int,
         n_reps: int,
-        n_warmup: int = 3,
-        use_synthetic: bool = True,
+        n_warmup: int,
+        use_synthetic: bool,
         syn_n_batches: int,
         subset_div: int = 1
     ) -> None:
@@ -132,7 +131,7 @@ class Benchmark(ABC):
         ...
 
     def prepare(self) -> None:
-        demo.prepare(casestudy=self.casestudy)
+        demo.prepare(self.casestudy)
         self.net = demo.get_net(
             os.path.join(demo.DEMO_DIR, 'models', demo.get_fnetname())
         )

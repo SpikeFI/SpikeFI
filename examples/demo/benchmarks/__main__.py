@@ -7,11 +7,12 @@ from .benchmark_b import BenchmarkB
 def run_a() -> None:
     bm = BenchmarkA(
         casestudy='nmnist_cnn',
+        session_id=3,
+        n_reps=40,
+        n_warmup=3,
         layers=['SC1', 'SC2', 'SC3', 'SF4a', 'SF4b'],
         batch_size=1,
-        n_reps=40,
         golden_on=True,
-        session_id=3,
         use_synthetic=True,
         syn_n_batches=1000,
         syn_n_time_bins=50
@@ -20,22 +21,18 @@ def run_a() -> None:
 
 
 def run_b() -> None:
-    t_sweep = [10, 25, 50, 100, 200, 375, 750, 1500, 3000, 6000]
-    b_sweep = []
-    cross_check = [
-        (4, 375), (16, 94),
-        (4, 1500), (16, 375)
-    ]
+    nt_sweep = [(4, 94), (4, 375), (4, 1500), (16, 94), (16, 375), (16, 1500)]
 
     bm = BenchmarkB(
         casestudy='nmnist_cnn',
-        layer='SC1',
-        syn_n_batches=20,
-        n_reps=10,
         session_id=1,
-        t_sweep=t_sweep,
-        b_sweep=b_sweep,
-        cross_check=cross_check
+        n_reps=10,
+        n_warmup=3,
+        layer='SC1',
+        nt_sweep=nt_sweep,
+        golden_on=True,
+        use_synthetic=True,
+        syn_n_batches=20
     )
     bm.run()
 
