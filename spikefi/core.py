@@ -20,7 +20,7 @@ from copy import deepcopy
 from enum import Enum
 from glob import glob
 from importlib.metadata import version
-from itertools import cycle, product
+from itertools import product
 from math import prod
 import numpy as np
 import pickle
@@ -28,6 +28,7 @@ import random
 from threading import Thread
 from types import MethodType
 from typing import Literal, Optional
+import warnings
 
 import torch
 from torch import nn, Tensor
@@ -143,7 +144,8 @@ class Campaign:
     def inject(
             self,
             faults: sff.Fault | Iterable[sff.Fault],
-            round_idx: int = -1
+            round_idx: int = -1,
+            rng: random.Random | None = None
     ) -> list[sff.Fault]:
         assert (
             -len(self.rounds) <= round_idx < len(self.rounds)
@@ -158,8 +160,24 @@ class Campaign:
         round_faults = [*self.rounds[round_idx].get_faults(), *faults]
 
         round_faults = sff.Fault.buildup(round_faults)
-        self.define_random(round_faults)
-        round_faults = self.validate(round_faults)
+        round_faults, n_unplaced = self.define_random(round_faults, rng=rng)
+        round_faults, n_invalid_sites, n_dropped_faults = self.validate(round_faults)
+
+        # Neither step raises on a shortfall; report it here instead.
+        messages = []
+        if n_unplaced:
+            messages.append(
+                f"{n_unplaced} fault site(s) had no available position and were discarded"
+            )
+        if n_invalid_sites or n_dropped_faults:
+            parts = []
+            if n_invalid_sites:
+                parts.append(f"{n_invalid_sites} invalid site(s)")
+            if n_dropped_faults:
+                parts.append(f"{n_dropped_faults} unsupported fault(s)")
+            messages.append(f"{' and '.join(parts)} were dropped during validation")
+        if messages:
+            warnings.warn('; '.join(messages) + '.', RuntimeWarning)
 
         self.rounds[round_idx].clear()
         self.rounds[round_idx].insert_many(round_faults)
@@ -168,69 +186,105 @@ class Campaign:
 
     def define_random(
             self,
-            faults: sff.Fault | Iterable[sff.Fault]
-    ) -> Iterable[sff.Fault]:
+            faults: sff.Fault | Iterable[sff.Fault],
+            rng: random.Random | None = None
+    ) -> tuple[list[sff.Fault], int]:
         if isinstance(faults, sff.Fault):
             faults = [faults]
+        faults = list(faults)
+        rng = rng or random
 
-        # Uniqueness of fault sites for multiple faults is guaranteed
-        # for all sites within the same fault object
+        # Neuron and synapse positions are disjoint spaces: resolve separately.
+        for is_syn in (False, True):
+            group = [f for f in faults if f.model.is_synaptic() == is_syn]  # faults of this kind
+            if not group:
+                continue
+
+            layer_fixed: dict[str, list[sff.FaultSite]] = {}  # layer -> its position-only pending sites
+            layer_free: list[sff.FaultSite] = []  # pending sites needing both layer and position
+            for f in group:
+                for s in f.sites_pending:
+                    if s.layer:
+                        layer_fixed.setdefault(s.layer, []).append(s)
+                    else:
+                        layer_free.append(s)
+
+            if not layer_fixed and not layer_free:
+                continue
+
+            eligible_layers = self.layers_info.get_injectables()  # candidate layers for layer_free
+            needed_layers = set(layer_fixed) | set(eligible_layers)  # layers whose shape is needed
+            dims_by_layer: dict[str, tuple[int, int, int, int]] = {}  # layer -> (K, L, M, N) sizes
+            for lay_name in needed_layers:
+                shape = self.layers_info.get_shape(is_syn, lay_name)
+                dims_by_layer[lay_name] = (
+                    shape[0] if is_syn else 1,
+                    shape[0 + is_syn],
+                    shape[1 + is_syn],
+                    shape[2 + is_syn]
+                )
+
+            # Positions already taken this round, per layer, by any fault of this kind.
+            excluded: dict[str, set[tuple[int, ...]]] = {lay: set() for lay in needed_layers}
+            for f in group:
+                for s in f.sites:
+                    pos4 = s.position if is_syn else (0,) + s.position  # pad neuron position to 4-tuple
+                    excluded.setdefault(s.layer, set()).add(pos4)
+
+            # Layer-fixed sites: sample within their own layer only.
+            for lay_name, sites in layer_fixed.items():
+                drawn = Campaign._sample_positions(
+                    [(lay_name, dims_by_layer[lay_name])],
+                    {lay_name: excluded[lay_name]},
+                    len(sites), rng
+                )  # positions assigned to as many sites as the layer still has room for
+                for site, d in zip(sites, drawn):
+                    pos4 = d[1:]
+                    site.position = pos4[1:] if not is_syn else pos4
+                    excluded[lay_name].add(pos4)
+                # Any sites past len(drawn) stay undefined and are discarded below.
+
+            # Layer-free sites: sample from all eligible layers combined.
+            if layer_free:
+                lay_dims = [(lay, dims_by_layer[lay]) for lay in eligible_layers]  # combined pool
+                excluded_free = {lay: excluded[lay] for lay in eligible_layers}
+                drawn = Campaign._sample_positions(
+                    lay_dims, excluded_free, len(layer_free), rng
+                )  # layer + position assigned to as many sites as the combined pool has room for
+                for site, d in zip(layer_free, drawn):
+                    site.layer = d[0]
+                    pos4 = d[1:]
+                    site.position = pos4[1:] if not is_syn else pos4
+                # Any sites past len(drawn) stay undefined and are discarded below.
+
+        # Discard whatever couldn't be placed; report only how many.
+        n_unplaced = 0
         for f in faults:
-            is_syn = f.model.is_synaptic()
-            l_count = {}
-            l_pos = {}
-            l_pos_iter = {}
-
-            for s in f.sites_pending:
-                if not s.layer:
-                    s.layer = self.layers_info.get_random_inj(is_syn)
-
-                l_count.setdefault(s.layer, 0)
-                l_count[s.layer] += 1
-
-            for lay, l_site_num in l_count.items():
-                ranges = [
-                    range(dim) for dim in self.layers_info.get_shape(
-                        is_syn, lay
-                    )
-                ]
-                all_comb = list(product(*ranges))
-
-                pos_excl = [
-                    p for p in [
-                        fs.position for fs in f.sites if fs.layer == lay
-                    ]
-                ]
-                pos_comb = [p for p in all_comb if p not in pos_excl]
-
-                if l_site_num >= len(pos_comb):
-                    l_pos[lay] = pos_comb
-                else:
-                    l_pos[lay] = random.sample(pos_comb, l_site_num)
-
-                l_pos_iter[lay] = cycle(l_pos[lay])
-
-            for s in f.sites_pending:
-                s.position = next(l_pos_iter[s.layer])
+            defined = [s for s in f.sites_pending if s.is_defined()]
+            n_unplaced += len(f.sites_pending) - len(defined)
+            f.sites_pending[:] = defined
 
             f.refresh(discard_duplicates=True)
             assert f.is_complete()
 
-        return faults
+        return faults, n_unplaced
 
     def validate(
             self,
             faults: sff.Fault | Iterable[sff.Fault]
-    ) -> list[sff.Fault]:
+    ) -> tuple[list[sff.Fault], int, int]:
         if isinstance(faults, sff.Fault):
             faults = [faults]
 
         valid_faults = []
+        n_invalid_sites = 0  # sites removed for a bad layer/out-of-bounds position
+        n_dropped_faults = 0  # whole faults removed for an unsupported parametric target
         for f in faults:
             if (
                 f.model.is_parametric()
                 and f.model.param_name not in self.slayer.neuron
             ):
+                n_dropped_faults += 1
                 continue
 
             is_syn = f.model.is_synaptic()
@@ -246,18 +300,20 @@ class Campaign:
                 if not v:
                     to_remove.add(s)
 
+            n_invalid_sites += len(to_remove)
             f.sites.difference_update(to_remove)
             if f:
                 valid_faults.append(f)
 
-        return valid_faults
+        return valid_faults, n_invalid_sites, n_dropped_faults
 
     def then_inject(
             self,
-            faults: sff.Fault | Iterable[sff.Fault]
+            faults: sff.Fault | Iterable[sff.Fault],
+            rng: random.Random | None = None
     ) -> list[sff.Fault]:
         self.rounds.append(sff.FaultRound())
-        return self.inject(faults, -1)
+        return self.inject(faults, -1, rng=rng)
 
     def inject_complete(
             self,
@@ -304,14 +360,7 @@ class Campaign:
         total_size = sum(lay_sizes)
 
         if fault_sampling_k is not None and fault_sampling_k < total_size:
-            # Draw k unique linear indices directly from the combined
-            # position space (a random.Random instance indexes range()
-            # objects in O(1), so this never builds the full product)
-            # and unrank each one back into its (layer, position) tuple.
-            inj_pos = [
-                Campaign._unrank_pos(lay_dims, lay_sizes, idx)
-                for idx in rng.sample(range(total_size), fault_sampling_k)
-            ]
+            inj_pos = Campaign._sample_positions(lay_dims, {}, fault_sampling_k, rng)
         else:
             inj_pos = [
                 (lay_name,) + p
@@ -323,7 +372,7 @@ class Campaign:
         for p in inj_pos:
             site = sff.FaultSite(p[0], p[1:] if is_syn else p[2:])
             fault = sff.Fault(fault_model, site)
-            inj_faults.append(self.then_inject(fault))
+            inj_faults.append(self.then_inject(fault, rng=rng))
 
         return inj_faults
 
@@ -349,6 +398,56 @@ class Campaign:
         position.reverse()
 
         return (lay_name,) + tuple(position)
+
+    # Draws k unique (layer, position) tuples from the combined position
+    # space of lay_dims, skipping whatever is already in excluded per
+    # layer. Never materializes the full space unless it actually has to:
+    # picks the cheapest of three strategies based on how much of that
+    # space is excluded (see the branches below).
+    @staticmethod
+    def _sample_positions(
+            lay_dims: list[tuple[str, tuple[int, int, int, int]]],
+            excluded: dict[str, set[tuple[int, ...]]],
+            k: int,
+            rng: random.Random
+    ) -> list[tuple]:
+        lay_sizes = [prod(dims) for _, dims in lay_dims]  # per-layer position counts
+        total_size = sum(lay_sizes)
+        total_excluded = sum(len(excluded.get(lay, ())) for lay, _ in lay_dims)
+        remaining = total_size - total_excluded
+        k = min(k, max(remaining, 0))
+        if k <= 0:
+            return []
+
+        if total_excluded == 0:
+            # No exclusions: sample indices directly, no materialization needed.
+            return [
+                Campaign._unrank_pos(lay_dims, lay_sizes, idx)
+                for idx in rng.sample(range(total_size), k)
+            ]
+
+        if remaining >= total_size / 2:
+            # Mostly free space: rejection sampling converges fast.
+            chosen: set[tuple[str, tuple]] = set()  # (layer, position) already drawn this call
+            result: list[tuple] = []
+            while len(result) < k:
+                idx = rng.randrange(total_size)
+                unranked = Campaign._unrank_pos(lay_dims, lay_sizes, idx)
+                lay_name, pos = unranked[0], unranked[1:]
+                if pos in excluded.get(lay_name, ()) or (lay_name, pos) in chosen:
+                    continue
+                chosen.add((lay_name, pos))
+                result.append(unranked)
+            return result
+
+        # Mostly excluded space: enumerate the true remainder instead.
+        pool = [
+            (lay_name,) + p
+            for lay_name, dims in lay_dims
+            for p in product(*(range(d) for d in dims))
+            if p not in excluded.get(lay_name, ())
+        ]
+        return rng.sample(pool, k)
 
     def eject(
             self,
