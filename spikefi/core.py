@@ -370,11 +370,7 @@ class Campaign:
         self.progress = CampaignProgress(
             len(train_loader), len(self.rounds), epochs, progress_mode
         )
-        self._progress_thread = Thread(
-            target=refresh_progress_job,
-            args=(self.progress, 0.1, progress_mode, ),
-            daemon=True)
-        self._progress_thread.start()
+        self._progress_thread = self._start_progress_thread(progress_mode)
 
         self.faulties = self._pre_run_train()
 
@@ -426,11 +422,7 @@ class Campaign:
         self.progress = CampaignProgress(
             len(test_loader), len(self.rounds), mode=progress_mode
         )
-        self._progress_thread = Thread(
-            target=refresh_progress_job,
-            args=(self.progress, 0.1, progress_mode, ),
-            daemon=True)
-        self._progress_thread.start()
+        self._progress_thread = self._start_progress_thread(progress_mode)
 
         # Decide optimization level
         if len(self.rounds) <= 1:
@@ -458,6 +450,25 @@ class Campaign:
         self._post_run()
 
         return N_critical
+
+    def _start_progress_thread(
+            self,
+            progress_mode: Literal[
+                'verbose', 'table', 'pbar', 'silent'
+            ] | None
+    ) -> Thread | None:
+        # In silent mode skip the polling thread entirely to avoid contending
+        # for self.progress' lock against every step() call for nothing.
+        if self.progress.mode == 'silent':
+            return None
+
+        thread = Thread(
+            target=refresh_progress_job,
+            args=(self.progress, 0.1, progress_mode, ),
+            daemon=True)
+        thread.start()
+
+        return thread
 
     def _pre_run(self, opt: CampaignOptimization) -> None:
         self.reset()
@@ -602,7 +613,12 @@ class Campaign:
     def _post_run(self, update_stats: bool = True):
         self.duration = self.progress.get_duration_sec()
 
-        self._progress_thread.join()
+        if self._progress_thread is not None:
+            self._progress_thread.join()
+        else:
+            # In silent mode close the bar directly
+            with self.progress._lock:
+                self.progress.pbar.close()
         del self._progress_thread
 
         # Update fault rounds statistics
