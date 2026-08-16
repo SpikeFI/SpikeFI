@@ -21,6 +21,7 @@ from enum import Enum
 from glob import glob
 from importlib.metadata import version
 from itertools import cycle, product
+from math import prod
 import numpy as np
 import pickle
 import random
@@ -262,7 +263,8 @@ class Campaign:
             self,
             fault_model: sff.FaultModel,
             layer_names: str | Iterable[str] | None = None,
-            fault_sampling_k: int | None = None
+            fault_sampling_k: int | None = None,
+            rng: random.Random | None = None
     ) -> list[sff.Fault]:
         if isinstance(layer_names, str):
             layer_names = [layer_names]
@@ -281,20 +283,41 @@ class Campaign:
             self.rounds.pop(-1)
 
         is_syn = fault_model.is_synaptic()
+        rng = rng or random
 
-        inj_pos = []
+        # Per-layer (K, L, M, N) dimension sizes, in the same order used
+        # by product() below, so that a single linear index into the
+        # combined position space of all targeted layers can be mapped
+        # back to a (layer, position) pair on demand (see _unrank_pos),
+        # without ever materializing the full Cartesian product.
+        lay_dims: list[tuple[str, tuple[int, int, int, int]]] = []
         for lay_name in lay_names_inj:
             lay_shape = self.layers_info.get_shape(is_syn, lay_name)
+            lay_dims.append((lay_name, (
+                lay_shape[0] if is_syn else 1,
+                lay_shape[0 + is_syn],
+                lay_shape[1 + is_syn],
+                lay_shape[2 + is_syn]
+            )))
 
-            K = range(lay_shape[0] if is_syn else 1)
-            L = range(lay_shape[0 + is_syn])
-            M = range(lay_shape[1 + is_syn])
-            N = range(lay_shape[2 + is_syn])
+        lay_sizes = [prod(dims) for _, dims in lay_dims]
+        total_size = sum(lay_sizes)
 
-            inj_pos += [(lay_name,) + p for p in product(K, L, M, N)]
-
-        if fault_sampling_k is not None and fault_sampling_k <= len(inj_pos):
-            inj_pos = random.sample(inj_pos, fault_sampling_k)
+        if fault_sampling_k is not None and fault_sampling_k < total_size:
+            # Draw k unique linear indices directly from the combined
+            # position space (a random.Random instance indexes range()
+            # objects in O(1), so this never builds the full product)
+            # and unrank each one back into its (layer, position) tuple.
+            inj_pos = [
+                Campaign._unrank_pos(lay_dims, lay_sizes, idx)
+                for idx in rng.sample(range(total_size), fault_sampling_k)
+            ]
+        else:
+            inj_pos = [
+                (lay_name,) + p
+                for lay_name, dims in lay_dims
+                for p in product(*(range(dim) for dim in dims))
+            ]
 
         inj_faults = []
         for p in inj_pos:
@@ -303,6 +326,29 @@ class Campaign:
             inj_faults.append(self.then_inject(fault))
 
         return inj_faults
+
+    @staticmethod
+    def _unrank_pos(
+            lay_dims: list[tuple[str, tuple[int, int, int, int]]],
+            lay_sizes: list[int],
+            idx: int
+    ) -> tuple:
+        # Walk layer blocks, sized lay_sizes[i], subtracting each one
+        # until idx lands in and is re-based to be local to its layer.
+        for (lay_name, dims), size in zip(lay_dims, lay_sizes):
+            if idx < size:
+                break
+            idx -= size
+
+        # Mixed-radix decode of idx into (k, l, m, n), matching
+        # product(K, L, M, N)'s order (N fastest, K slowest).
+        position = []
+        for dim in reversed(dims):
+            idx, coord = divmod(idx, dim)
+            position.append(coord)
+        position.reverse()
+
+        return (lay_name,) + tuple(position)
 
     def eject(
             self,
