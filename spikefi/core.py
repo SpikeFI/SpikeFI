@@ -26,6 +26,7 @@ import numpy as np
 import pickle
 import random
 from threading import Thread
+from time import time
 from types import MethodType
 from typing import Literal, Optional
 import warnings
@@ -89,6 +90,7 @@ class Campaign:
 
         self.r_idx_ref = RoundIndex(0)
         self.duration = 0.
+        self.duration_wall = 0.  # sync-bracketed wall-clock time for the whole run()/run_train() call
         self.rounds: list[sff.FaultRound] = [sff.FaultRound()]
         self.orounds: list[sff.OptimizedFaultRound] = []
         self.rgroups: dict[str, list[int]] = {}
@@ -512,6 +514,10 @@ class Campaign:
                 'verbose', 'table', 'pbar', 'silent'
             ] | None = None
     ) -> list[nn.Module]:
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+        t_wall = time()
+
         # Initialize and refresh progress
         self.progress = CampaignProgress(
             len(train_loader), len(self.rounds), epochs, progress_mode
@@ -520,6 +526,10 @@ class Campaign:
 
         self.faulties = self._pre_run_train()
 
+        # Explicit sync on both ends: don't let async work left over
+        # from _pre_run_train bleed into the measured window.
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
         self.progress.timer()
         for r_idx, faulty in enumerate(self.faulties):
             self.r_idx_ref.r = r_idx
@@ -533,9 +543,15 @@ class Campaign:
                 optimizer_factory,
                 scheduler_factory
             )
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
         self.progress.timer()
 
         self._post_run(update_stats=False)
+
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+        self.duration_wall = time() - t_wall
 
         return self.faulties
 
@@ -562,6 +578,10 @@ class Campaign:
                 'verbose', 'table', 'pbar', 'silent'
             ] | None = None
     ) -> Tensor | None:
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+        t_wall = time()
+
         self._pre_run(opt)
 
         # Initialize and refresh progress
@@ -589,11 +609,21 @@ class Campaign:
             if opt.value >= CampaignOptimization.O3.value:
                 eval_args += (es_tol,)
 
+            # Explicit sync on both ends: don't let async work left
+            # over from _pre_run bleed into the measured window.
+            if self.device.type == 'cuda':
+                torch.cuda.synchronize(self.device)
             self.progress.timer()
             N_critical = evaluate_method(*eval_args)
+            if self.device.type == 'cuda':
+                torch.cuda.synchronize(self.device)
             self.progress.timer()
 
         self._post_run()
+
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+        self.duration_wall = time() - t_wall
 
         return N_critical
 
