@@ -135,8 +135,9 @@ class Campaign:
             (1, *self.layers_info.shape_in, 1)
         ).to(self.device)
 
-        out = self.golden(dummy_input)
-        self.golden.tail(out)
+        with torch.inference_mode():
+            out = self.golden(dummy_input)
+            self.golden.tail(out)
 
         for handle in handles:
             handle.remove()
@@ -583,7 +584,7 @@ class Campaign:
                 evaluate_method = self._evaluate_O0
 
         # Evaluate faults' effects
-        with torch.no_grad():
+        with torch.inference_mode():
             eval_args = (test_loader, spike_loss)
             if opt.value >= CampaignOptimization.O3.value:
                 eval_args += (es_tol,)

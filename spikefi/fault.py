@@ -194,6 +194,12 @@ class FaultModel:
             original: float | Tensor,
             clean: bool = False
     ) -> float | Tensor:
+        # Detach before caching: Storing 'original' as-is would
+        # carry the autograd graph along with the Fault and
+        # break deepcopy, which only supports leaf tensors.
+        if isinstance(original, Tensor):
+            original = original.detach()
+
         if not clean and self.is_perturbed():
             unchanged = (
                 torch.equal(self.original, original)
@@ -218,7 +224,10 @@ class FaultModel:
         return original
 
     def store(self, perturbed: float | Tensor) -> None:
-        self.perturbed = perturbed
+        # Detach first: never cache a non-leaf tensor.
+        self.perturbed = (
+            perturbed.detach() if isinstance(perturbed, Tensor) else perturbed
+        )
 
     def unstore(self) -> float | Tensor:
         perturbed = self.perturbed
