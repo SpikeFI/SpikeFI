@@ -574,6 +574,7 @@ class Campaign:
             spike_loss: snn.loss | None = None,
             es_tol: int = 0,
             opt: CampaignOptimization = CampaignOptimization.FO,
+            compute_critical: bool = False,
             progress_mode: Literal[
                 'verbose', 'table', 'pbar', 'silent'
             ] | None = None
@@ -605,16 +606,22 @@ class Campaign:
 
         # Evaluate faults' effects
         with torch.inference_mode():
-            eval_args = (test_loader, spike_loss)
-            if opt.value >= CampaignOptimization.O3.value:
-                eval_args += (es_tol,)
+            # Passed by keyword, not position:
+            # the four _evaluate_* methods don't share one signature
+            eval_kwargs = dict(
+                test_loader=test_loader,
+                spike_loss=spike_loss,
+                compute_critical=compute_critical
+            )
+            if opt.value >= CampaignOptimization.O2.value:
+                eval_kwargs['es_tol'] = es_tol
 
             # Explicit sync on both ends: don't let async work left
             # over from _pre_run bleed into the measured window.
             if self.device.type == 'cuda':
                 torch.cuda.synchronize(self.device)
             self.progress.timer()
-            N_critical = evaluate_method(*eval_args)
+            N_critical = evaluate_method(**eval_kwargs)
             if self.device.type == 'cuda':
                 torch.cuda.synchronize(self.device)
             self.progress.timer()
@@ -884,39 +891,76 @@ class Campaign:
     def _evaluate_single(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss | None = None
-    ) -> None:
+            spike_loss: snn.loss | None = None,
+            compute_critical: bool = False
+    ) -> Tensor | None:
+        n_critical = (
+            torch.zeros(1, dtype=torch.int, device=self.device)
+            if compute_critical else None
+        )
+
         for input, label in test_loader:
             self.progress.step_batch()
 
-            output = self.faulty(input.to(self.device))
+            input = input.to(self.device)
+            label = label.to(self.device)
+            output = self.faulty(input)
 
-            self._advance_performance(
-                output, label.to(self.device), spike_loss
-            )
+            pred = None
+            if compute_critical:
+                golden_pred = self.golden(input).sum(dim=(2, 3, 4)).argmax(dim=1)
+                pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+                n_critical += torch.sum((golden_pred == label) & (pred != label))
+
+            self._advance_performance(output, label, spike_loss, predict=pred)
             self.progress.step()
+
+        return n_critical
 
     def _evaluate_O0(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss | None = None
-    ) -> None:
+            spike_loss: snn.loss | None = None,
+            compute_critical: bool = False
+    ) -> Tensor | None:
+        N_critical = (
+            torch.zeros(len(self.rounds), dtype=torch.int, device=self.device)
+            if compute_critical else None
+        )
+
         # For each fault round group
         for round_group in self.rgroups.values():
             # For each fault round
             for r_idx in round_group:
                 self.r_idx_ref.r = r_idx
                 self.progress.step_round()
-                self._evaluate_single(test_loader, spike_loss)
+                n_critical = self._evaluate_single(test_loader, spike_loss, compute_critical)
+                if compute_critical:
+                    N_critical[r_idx] = n_critical
+
+        return N_critical
 
     def _evaluate_O1(
             self,
             test_loader: DataLoader,
-            spike_loss: snn.loss | None = None
-    ) -> None:
+            spike_loss: snn.loss | None = None,
+            compute_critical: bool = False
+    ) -> Tensor | None:
+        N_critical = (
+            torch.zeros(len(self.rounds), dtype=torch.int, device=self.device)
+            if compute_critical else None
+        )
+
         # For each batch
         for input, label in test_loader:
             self.progress.step_batch()
+
+            input = input.to(self.device)
+            label = label.to(self.device)
+
+            # Golden prediction is fault round-independent
+            if compute_critical:
+                golden_pred = self.golden(input).sum(dim=(2, 3, 4)).argmax(dim=1)
 
             # For each fault round group
             for round_group in self.rgroups.values():
@@ -925,33 +969,43 @@ class Campaign:
                     self.r_idx_ref.r = r_idx
                     self.progress.step_round()
 
-                    output = self.faulty(input.to(self.device))
+                    output = self.faulty(input)
 
-                    self._advance_performance(
-                        output, label.to(self.device), spike_loss
-                    )
+                    pred = None
+                    if compute_critical:
+                        pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+                        N_critical[r_idx] += torch.sum((golden_pred == label) & (pred != label))
+
+                    self._advance_performance(output, label, spike_loss, predict=pred)
                     self.progress.step()
+
+        return N_critical
 
     def _evaluate_optimized(
             self,
             test_loader: DataLoader,
             spike_loss: snn.loss | None = None,
-            es_tol: int = 0
-    ) -> Tensor:
-        N_critical = torch.zeros(len(self.rounds), dtype=torch.int, device=self.device)
+            es_tol: int = 0,
+            compute_critical: bool = False
+    ) -> Tensor | None:
+        N_critical = (
+            torch.zeros(len(self.rounds), dtype=torch.int, device=self.device)
+            if compute_critical else None
+        )
 
         # For each batch
         for input, label in test_loader:
             label = label.to(self.device)
             self.progress.step_batch()
 
-            # Store golden spikes
+            # Store golden spikes needed for late start/early stop
             golden_spikes = [input.to(self.device)]
             for layer_idx in range(len(self.layers_info)):
                 golden_spikes.append(
                     self.golden(golden_spikes[layer_idx], layer_idx, layer_idx)
                 )
-            golden_pred = golden_spikes[-1].sum(dim=(2, 3, 4)).argmax(dim=1)
+            if compute_critical:
+                golden_pred = golden_spikes[-1].sum(dim=(2, 3, 4)).argmax(dim=1)
 
             # For each fault round group
             for round_group in self.rgroups.values():
@@ -987,13 +1041,15 @@ class Campaign:
                                 early_stop_next_out[~early_stop], es_idx + 2
                             )
 
-                    pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
-                    N_critical[r_idx] += torch.sum(
-                        (golden_pred == label) & (pred != label)
-                    )
+                    pred = None
+                    if compute_critical:
+                        pred = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+                        N_critical[r_idx] += torch.sum(
+                            (golden_pred == label) & (pred != label)
+                        )
 
                     self._advance_performance(
-                        output, label, spike_loss
+                        output, label, spike_loss, predict=pred
                     )
                     self.progress.step()
 
@@ -1004,7 +1060,8 @@ class Campaign:
             output: Tensor,
             label: Tensor,
             spike_loss: snn.loss | None = None,
-            training: bool = False
+            training: bool = False,
+            predict: Tensor | None = None
     ) -> tuple[Tensor, int] | None:
         if spike_loss is not None:
             # One-hot vector for labels: target[b, label[b], 0, 0, 0] = 1
@@ -1019,7 +1076,8 @@ class Campaign:
             perf = self.performance[self.r_idx_ref.r]
             stat = perf.training if training else perf.testing
 
-            predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
+            if predict is None:
+                predict = output.sum(dim=(2, 3, 4)).argmax(dim=1)
             correct = (predict == label).sum().item()
             batch_s = label.size(0)
 

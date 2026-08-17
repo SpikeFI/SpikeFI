@@ -211,7 +211,8 @@ for lay_name in layers:
                         test_loader,
                         spike_loss=snn.loss(demo.net_params).to(cmpn.device),
                         es_tol=t,
-                        opt=sfi.CampaignOptimization(o)
+                        opt=sfi.CampaignOptimization(o),
+                        compute_critical=o >= sfi.CampaignOptimization.O3.value
                     )
 
                     durations.append(cmpn.duration)
