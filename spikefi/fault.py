@@ -127,11 +127,11 @@ class FaultModel:
         self.target = target
         self.method = method
         self.args = args
-        # Persistent: whether the fault must be continuously re-enforced
-        # against external changes, as opposed to a one-shot event applied
-        # once and training then adapts around it freely, like any other
-        # weight. Applies only to soft synapse faults
-        # (e.g., Bitflipped Synapse and Perturbed Synapse).
+        # Persistent: whether the fault 'persists' training and must be
+        # continuously re-enforced against external changes, as opposed
+        # to a one-shot event applied once and training adjusts it freely.
+        # Examples of non-persistent faults:
+        # Bitflipped Synapse and Perturbed Synapse
         self.persistent: bool = persistent
 
         self.original: float | Tensor = None
