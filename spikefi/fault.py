@@ -415,10 +415,18 @@ class Fault:
             self.add_site(s)
 
 
+# Faults of a round re-bucketed by the two properties a fault hook
+# looks them up by: the layer they are on and their fault target
+GroupedFaults = dict[tuple[str, FaultTarget], list['Fault']]
+
+
 class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
     def __init__(self, *args, **kwargs) -> None:
         # Indicate faulty layers and their fault targets
         self.fault_map: dict[str, list[bool]] = {}
+
+        # Directly indexable view of this round's faults
+        self.grouped: GroupedFaults = {}
 
         # Construct from an Iterable of Faults
         if (
@@ -455,7 +463,7 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
             layer_name: str,
             target: FaultTarget = FaultTarget.all()
     ) -> bool:
-        layer_map = self.fault_map.get(layer_name, [False] * 3)
+        layer_map = self.fault_map.get(layer_name, [False] * len(FaultTarget))
         return any(layer_map[t.get_index()] for t in target)
 
     def any_neuronal(self, layer_name: str) -> bool:
@@ -499,6 +507,28 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
                 if not f:
                     del self[key]
 
+                    # A Fault losing only some of its sites stays in self.grouped,
+                    # which references it, and so is already up to date
+                    gkey = (s.layer, fault.model.target)
+                    self.grouped[gkey] = [
+                        x for x in self.grouped[gkey] if x is not f
+                    ]
+                    if not self.grouped[gkey]:
+                        del self.grouped[gkey]
+                        self._refresh_fault_map(s.layer)
+
+    # Recomputes a layer's fault targets from the faults the round holds
+    def _refresh_fault_map(self, layer_name: str) -> None:
+        layer_map = [False] * len(FaultTarget)
+        for target in FaultTarget:
+            if (layer_name, target) in self.grouped:
+                layer_map[target.get_index()] = True
+
+        if any(layer_map):
+            self.fault_map[layer_name] = layer_map
+        else:
+            self.fault_map.pop(layer_name, None)
+
     def extract_many(self, faults: Iterable[Fault]) -> None:
         for f in faults:
             self.extract(f)
@@ -509,10 +539,17 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
 
         for s in fault.sites:
             key = (s.layer, fault.model)
-            self.setdefault(key, Fault(deepcopy(fault.model), []))
+            if key not in self:
+                self[key] = Fault(deepcopy(fault.model), [])
+                self.grouped.setdefault(
+                    (s.layer, fault.model.target), []
+                ).append(self[key])
+
+            # self.grouped references the same Fault objects as the FaultRound,
+            # so an update self[key] is directly visible in self.grouped
             self[key].add_site(s)
 
-            self.fault_map.setdefault(s.layer, [False] * 3)
+            self.fault_map.setdefault(s.layer, [False] * len(FaultTarget))
             self.fault_map[s.layer][fault.model.target.get_index()] = True
 
     def insert_many(self, faults: Iterable[Fault]) -> None:
@@ -564,6 +601,10 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
             self, layers_info, late_start_en, early_stop_en
         )
         oround.fault_map = deepcopy(self.fault_map)
+
+        # Shallow copy: the optimized round shares this round's Fault
+        # objects, so its grouped view must reference the same ones
+        oround.grouped = {k: list(v) for k, v in self.grouped.items()}
 
         return oround
 

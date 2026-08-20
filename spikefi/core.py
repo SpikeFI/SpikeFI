@@ -15,7 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 from enum import Enum
 from glob import glob
@@ -98,8 +98,8 @@ class Campaign:
         # Every dispatching hook currently registered, keyed by
         # (net_scope, layer_name, hook_class)
         self.dispatch_hooks: dict[
-            tuple[int | None, str | None, type[DispatchingHook]],
-            DispatchingHook
+            tuple[int | None, str | None, type],
+            'DispatchingHook | SynapsePersistentTrainingHook'
         ] = {}
 
     def __repr__(self) -> str:
@@ -705,7 +705,8 @@ class Campaign:
         # (ii) set to the round index during training, where each round
         # gets its own faulty net and so every hook belongs to that round
         net_scope = r if training else None
-        persistent_syn_faults: list[tuple[nn.Module, sff.Fault]] = []
+
+        rounds_ref = self.rounds if training else self.orounds
 
         for layer_name in self.layers_info.get_injectables():
             layer = getattr(faulty, layer_name)
@@ -714,7 +715,7 @@ class Campaign:
             if round.any_neuronal(layer_name):
                 # Parametric faults (subset of neuronal faults)
                 if round.any_parametric(layer_name):
-                    param_faults = round.search_parametric(layer_name)
+                    param_faults = round.grouped[(layer_name, sff.FaultTarget.PARAMETER)]
                     for fault in param_faults:
                         # Create parametric faults' dummy layers
                         fault.model.param_perturb(self.slayer, self.device)
@@ -723,10 +724,11 @@ class Campaign:
                     # neuron fault hook (on the faulty layer)
                     key = (net_scope, layer_name, NeuronParametricHook)
                     if key not in self.dispatch_hooks:
-                        hook = NeuronParametricHook(actual_round_idx=self.r_idx_ref)
+                        hook = NeuronParametricHook(
+                            self.r_idx_ref, rounds_ref, layer_name
+                        )
                         self.dispatch_hooks[key] = hook
                         layer.register_forward_hook(hook)
-                    self.dispatch_hooks[key].add_faults(r, param_faults)
 
                 # Neuronal faults for last layer are evaluated on
                 # a 'tail' layer that does nothing
@@ -739,16 +741,15 @@ class Campaign:
                 key = (net_scope, layer_name, NeuronPerturbPreHook)
                 if key not in self.dispatch_hooks:
                     pre_hook = NeuronPerturbPreHook(
-                        actual_round_idx=self.r_idx_ref,
+                        self.r_idx_ref, rounds_ref, layer_name,
                         layer_shape=self.layers_info.shapes_neu[layer_name]
                     )
                     self.dispatch_hooks[key] = pre_hook
                     following_layer.register_forward_pre_hook(pre_hook)
-                self.dispatch_hooks[key].add_faults(r, round.search_neuronal(layer_name))
 
             # Synaptic faults
             if round.any_synaptic(layer_name):
-                syn_faults = round.search_synaptic(layer_name)
+                syn_faults = round.grouped[(layer_name, sff.FaultTarget.WEIGHT)]
 
                 if not training:
                     # In post-training fault injection: perturb before every forward pass and
@@ -756,14 +757,16 @@ class Campaign:
                     pre_key = (net_scope, layer_name, SynapsePerturbPreHook)
                     post_key = (net_scope, layer_name, SynapseRestoreHook)
                     if pre_key not in self.dispatch_hooks:
-                        pre_hook = SynapsePerturbPreHook(self.r_idx_ref)
-                        hook = SynapseRestoreHook(self.r_idx_ref)
+                        pre_hook = SynapsePerturbPreHook(
+                            self.r_idx_ref, rounds_ref, layer_name
+                        )
+                        hook = SynapseRestoreHook(
+                            self.r_idx_ref, rounds_ref, layer_name
+                        )
                         self.dispatch_hooks[pre_key] = pre_hook
                         self.dispatch_hooks[post_key] = hook
                         layer.register_forward_pre_hook(pre_hook)
                         layer.register_forward_hook(hook)
-                    self.dispatch_hooks[pre_key].add_faults(r, syn_faults)
-                    self.dispatch_hooks[post_key].add_faults(r, syn_faults)
 
                     # Store the perturbed synapse weight in the cache
                     for fault in syn_faults:
@@ -777,17 +780,12 @@ class Campaign:
                             all_ind = fault.unroll()
                             layer.weight[all_ind] = fault.model.perturb(layer.weight[all_ind])
 
-                            # Collection of persistent synapse faults to be re-enforced
-                            # after each optimizer's step.
-                            if fault.model.persistent:
-                                persistent_syn_faults.append((layer, fault))
-
         if training:
             # Register the optimizer hook to re-enforce persistent synapse faults.
             # One per round/faulty net (net_scope == r), aggregating for all layers.
-            hook = SynapsePersistentTrainingHook(self.r_idx_ref)
-            hook.add_faults(r, persistent_syn_faults)
-            self.dispatch_hooks[(net_scope, None, SynapsePersistentTrainingHook)] = hook
+            self.dispatch_hooks[(net_scope, None, SynapsePersistentTrainingHook)] = (
+                SynapsePersistentTrainingHook(faulty, round)
+            )
 
     def _post_run(self, update_stats: bool = True):
         self.duration = self.progress.get_duration_sec()
@@ -1179,37 +1177,33 @@ class RoundIndex:
 
 
 # Shared base for hook classes: they serve every round touching a given
-# dispatch point (e.g., a layer) from one object.
+#  (dispatching point) from one object
 class DispatchingHook:
-    def __init__(self, actual_round_idx: RoundIndex) -> None:
+    def __init__(
+            self,
+            actual_round_idx: RoundIndex,
+            rounds_ref: Sequence[sff.FaultRound],
+            layer_name: str,
+            target: sff.FaultTarget
+    ) -> None:
         self.actual_round_idx = actual_round_idx
-        # Most subclasses store plain faults, while SynapsePersistentTrainingHook
-        # stores (layer, fault) pairs, since it isn't layer-scoped.
-        self.faults_by_round: dict[
-            int, list[sff.Fault] | list[tuple[nn.Module, sff.Fault]]
-        ] = {}
+        self.rounds_ref = rounds_ref
+        self.layer_name = layer_name
+        self.target = target
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(rounds_served={len(self.faults_by_round)})"
+        return (
+            f"{type(self).__name__}(layer='{self.layer_name}', "
+            f"target={self.target})"
+        )
 
     def __bool__(self) -> bool:
         return bool(self._active_faults())
 
-    def add_faults(
-            self,
-            round_idx: int,
-            faults: list[sff.Fault] | list[tuple[nn.Module, sff.Fault]]
-    ) -> None:
-        assert round_idx not in self.faults_by_round, (
-            f"round {round_idx} already registered on this hook"
-        )
-        self.faults_by_round[round_idx] = faults
-
-    # Returns the round's payload
-    def _active_faults(
-            self
-    ) -> list[sff.Fault] | list[tuple[nn.Module, sff.Fault]] | None:
-        return self.faults_by_round.get(self.actual_round_idx.r)
+    # Returns the faults of the active round this hook is responsible for
+    def _active_faults(self) -> list[sff.Fault]:
+        round = self.rounds_ref[self.actual_round_idx.r]
+        return round.grouped.get((self.layer_name, self.target), [])
 
 
 # Pre-hook on the layer succeeding a faulty layer: overwrites the
@@ -1218,14 +1212,27 @@ class NeuronPerturbPreHook(DispatchingHook):
     def __init__(
             self,
             actual_round_idx: RoundIndex,
+            rounds_ref: Sequence[sff.FaultRound],
+            layer_name: str,
             layer_shape: tuple[int, int, int]
     ) -> None:
-        super().__init__(actual_round_idx)
+        super().__init__(
+            actual_round_idx, rounds_ref, layer_name,
+            sff.FaultTarget.neuronal()
+        )
         self.layer_shape = layer_shape
+
+    # Neuronal faults span two targets, which are grouped separately
+    def _active_faults(self) -> list[sff.Fault]:
+        grouped = self.rounds_ref[self.actual_round_idx.r].grouped
+        return (
+            grouped.get((self.layer_name, sff.FaultTarget.OUTPUT), [])
+            + grouped.get((self.layer_name, sff.FaultTarget.PARAMETER), [])
+        )
 
     def __call__(self, _, inputs: tuple[Tensor, ...]) -> None:
         faults = self._active_faults()
-        if faults is None:
+        if not faults:
             return
 
         prev_spikes_out = inputs[0]
@@ -1252,9 +1259,20 @@ class NeuronPerturbPreHook(DispatchingHook):
 # dummy neuron layer on the fault site and stashes the result, for
 # NeuronPerturbPreHook to pick up on the following layer's pre-hook.
 class NeuronParametricHook(DispatchingHook):
+    def __init__(
+            self,
+            actual_round_idx: RoundIndex,
+            rounds_ref: Sequence[sff.FaultRound],
+            layer_name: str
+    ) -> None:
+        super().__init__(
+            actual_round_idx, rounds_ref, layer_name,
+            sff.FaultTarget.PARAMETER
+        )
+
     def __call__(self, _, __, spikes_out: Tensor) -> None:
         faults = self._active_faults()
-        if faults is None:
+        if not faults:
             return
 
         for fault in faults:
@@ -1272,9 +1290,20 @@ class NeuronParametricHook(DispatchingHook):
 # Pre-hook on a faulty layer: writes each fault's cached perturbed
 # weight value in before the forward pass. Post-training FI only.
 class SynapsePerturbPreHook(DispatchingHook):
+    def __init__(
+            self,
+            actual_round_idx: RoundIndex,
+            rounds_ref: Sequence[sff.FaultRound],
+            layer_name: str
+    ) -> None:
+        super().__init__(
+            actual_round_idx, rounds_ref, layer_name,
+            sff.FaultTarget.WEIGHT
+        )
+
     def __call__(self, layer: nn.Module, *args) -> None:
         faults = self._active_faults()
-        if faults is None:
+        if not faults:
             return
 
         with torch.no_grad():
@@ -1287,9 +1316,20 @@ class SynapsePerturbPreHook(DispatchingHook):
 # weight value after the forward pass to isolate each fault round.
 # Pairs with SynapsePerturbPreHook. Post-training FI only.
 class SynapseRestoreHook(DispatchingHook):
+    def __init__(
+            self,
+            actual_round_idx: RoundIndex,
+            rounds_ref: Sequence[sff.FaultRound],
+            layer_name: str
+    ) -> None:
+        super().__init__(
+            actual_round_idx, rounds_ref, layer_name,
+            sff.FaultTarget.WEIGHT
+        )
+
     def __call__(self, layer: nn.Module, *args) -> None:
         faults = self._active_faults()
-        if faults is None:
+        if not faults:
             return
 
         with torch.no_grad():
@@ -1302,16 +1342,30 @@ class SynapseRestoreHook(DispatchingHook):
 # persistent synapse faults are re-applied after every optimizer step so
 # they aren't trained away. One hook per round, aggregating faults across
 # every layer that round touches, as (layer, fault) pairs.
-class SynapsePersistentTrainingHook(DispatchingHook):
+class SynapsePersistentTrainingHook:
+    def __init__(self, faulty: nn.Module, round: sff.FaultRound) -> None:
+        self.persistent_syn_faults: list[tuple[nn.Module, sff.Fault]] = [
+            (getattr(faulty, layer_name), fault)
+            for (layer_name, target), faults in round.grouped.items()
+            if target == sff.FaultTarget.WEIGHT
+            for fault in faults
+            if fault.model.persistent
+        ]
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}"
+            f"(persistent_syn_faults={len(self.persistent_syn_faults)})"
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.persistent_syn_faults)
+
     def __call__(self, optimizer: Optimizer, args: tuple, kwargs: dict) -> None:
         # Fires synchronously right after optimizer.step() returns, so
         # persistent faults are never observed in a drifted state.
-        persistent_syn_faults = self._active_faults()
-        if persistent_syn_faults is None:
-            return
-
         with torch.no_grad():
-            for layer, fault in persistent_syn_faults:
+            for layer, fault in self.persistent_syn_faults:
                 all_ind = fault.unroll()
                 layer.weight[all_ind] = fault.model.perturb(layer.weight[all_ind])
 
