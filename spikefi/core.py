@@ -471,7 +471,7 @@ class Campaign:
                 self.rounds.pop(round_idx)
         # Eject from all rounds
         else:
-            # Eject indicated faults from any round the might exist
+            # Eject indicated faults from any round they might exist
             if faults:
                 for r in self.rounds:
                     r.extract_many(faults)
@@ -1244,11 +1244,17 @@ class NeuronPerturbPreHook(DispatchingHook):
         for fault in faults:
             idx = (slice(None), *fault.unroll(), slice(None))
             fspike_out = fault.model.unstore()
-            fm_args = (
-                (fspike_out,)
-                if fspike_out is not None
-                else fault.model.args
-            )
+
+            if fspike_out is not None:
+                fm_args = (fspike_out,)
+            elif fault.model.is_parametric():
+                # A neuron parametric fault must always have a value stashed.
+                raise RuntimeError(
+                    f"No stashed value for parametric fault {fault.model} "
+                    f"on layer '{self.layer_name}'"
+                )
+            else:
+                fm_args = fault.model.args
 
             prev_spikes_out[idx] = fault.model.perturb(
                 prev_spikes_out[idx], *fm_args

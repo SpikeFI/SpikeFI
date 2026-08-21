@@ -158,7 +158,18 @@ class FaultModel:
         )
 
     def _key(self) -> tuple:
-        return self.target, self.method, self.args
+        return self.target, self.method, tuple(map(FaultModel._hashable, self.args))
+
+    @staticmethod
+    def _hashable(arg: 'float | Tensor | list') -> 'float | tuple':
+        if isinstance(arg, Tensor):
+            arg = arg.item() if arg.ndim == 0 else arg.tolist()
+
+        return (
+            tuple(map(FaultModel._hashable, arg))
+            if isinstance(arg, list)
+            else arg
+        )
 
     def get_name(self) -> str:
         name = self.__class__.__name__
@@ -450,6 +461,11 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
     def __str__(self) -> str:
         return self._info(verbose=False)
 
+    def clear(self) -> None:
+        super().clear()
+        self.grouped.clear()
+        self.fault_map.clear()
+
     def _info(self, verbose: bool) -> str:
         sfunc = repr if verbose else str
         s = 'Fault Round: {'
@@ -701,8 +717,14 @@ class OptimizedFaultRound(FaultRound):
             return
 
         # If there are only neuronal faults, late-start layer can be increased
-        # because the fault effect is evaluated on the next layer's pre-hook
-        if self.neuronal_only and not self.parametric_only:
+        # because the fault effect is evaluated on the next layer's pre-hook.
+        # This only holds when the late-start layer itself carries no neuron
+        # parametric fault.
+        late_start_is_parametric = any(
+            key[0] == self.late_start_name and key[1].target == FaultTarget.PARAMETER
+            for key in self
+        )
+        if self.neuronal_only and not late_start_is_parametric:
             self.late_start_idx += 1
             if self.late_start_idx < len(layers_info):
                 self.late_start_name = layers_info.order[self.late_start_idx]

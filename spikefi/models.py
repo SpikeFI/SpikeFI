@@ -128,7 +128,7 @@ class ParametricNeuronFaultModel(FaultModel):
             self.method,
             self.param_name,
             self.param_method,
-            self.param_args
+            tuple(map(FaultModel._hashable, self.param_args))
         )
 
     def is_param_perturbed(self) -> bool:

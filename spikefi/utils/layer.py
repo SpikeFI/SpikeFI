@@ -86,18 +86,18 @@ class LayersInfo:
 
     def infer(self, name: str, layer: nn.Module, output: Tensor) -> None:
         if not LayersInfo.is_module_supported(layer):
-            print(
-                f"Attention: unsupported layer type {type(layer)} found. "
-                "Potential invalidity of results."
+            raise RuntimeError(
+                f"Unsupported layer type {type(layer)} found for layer "
+                f"'{name}'. SpikeFI cannot faithfully reproduce this net's "
+                "forward pass."
             )
-            return
 
         is_injectable = LayersInfo.is_module_injectable(layer)
         if is_injectable and name in self.names:
-            print(
-                'Cannot use an injectable layer more than once in the network.'
+            raise RuntimeError(
+                f"Layer '{name}' is used more than once in the network. "
+                "An injectable layer cannot be reused."
             )
-            return
 
         # isinstance(layer, (nn.Conv3d, nn.ConvTranspose3d))
         has_weigth = hasattr(layer, 'weight')
