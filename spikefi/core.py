@@ -291,8 +291,14 @@ class Campaign:
                 n_dropped_faults += 1
                 continue
 
+            # Drop site-less faults
+            if not f.sites:
+                n_dropped_faults += 1
+                continue
+
             is_syn = f.model.is_synaptic()
             to_remove = set()
+            to_normalize: dict[sff.FaultSite, sff.FaultSite] = {}
 
             for s in f.sites:  # Validate only the defined fault sites
                 v = self.layers_info.is_injectable(s.layer)
@@ -303,9 +309,25 @@ class Campaign:
 
                 if not v:
                     to_remove.add(s)
+                elif any(p < 0 for p in s.position):
+                    # Normalize negative positions without mutating the hash
+                    # key (position is part of the key) of fault sites set member
+                    to_normalize[s] = sff.FaultSite(
+                        s.layer,
+                        tuple(
+                            p + shape[i] if p < 0 else p
+                            for i, p in enumerate(s.position)
+                        )
+                    )
 
             n_invalid_sites += len(to_remove)
             f.sites.difference_update(to_remove)
+
+            for old, new in to_normalize.items():
+                # Ensures that set redoes the hash/bucket placement properly
+                f.sites.discard(old)
+                f.sites.add(new)
+
             if f:
                 valid_faults.append(f)
 
@@ -473,10 +495,13 @@ class Campaign:
         else:
             # Eject indicated faults from any round they might exist
             if faults:
+                emptied = []
                 for r in self.rounds:
                     r.extract_many(faults)
                     if not r:
-                        self.rounds.pop(r)
+                        emptied.append(r)
+                for r in emptied:
+                    self.rounds.remove(r)
             # Eject all faults from all rounds, i.e., all the rounds themselves
             else:
                 self.rounds.clear()

@@ -124,6 +124,7 @@ class ParametricNeuronFaultModel(FaultModel):
 
     def _key(self) -> tuple:
         return (
+            type(self),
             self.target,
             self.method,
             self.param_name,
@@ -324,11 +325,18 @@ class PerturbedSynapse(FaultModel):
 class BitflippedSynapse(FaultModel):
     def __init__(
             self,
-            bit: int | Iterable[int],
+            bit: int | Iterable[int] | Tensor,
             scale: float,
             zero_point: int,
             dtype: torch.dtype
     ):
+        # Normalize bit argument to a sorted tuple of ints
+        if isinstance(bit, Tensor):
+            bit = bit.tolist()
+        if isinstance(bit, int):
+            bit = (bit,)
+        bit = tuple(sorted(set(bit)))
+
         super().__init__(
             FaultTarget.WEIGHT, bfl_value, bit, scale, zero_point, dtype,
             persistent=False

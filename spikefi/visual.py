@@ -61,14 +61,14 @@ def _data_mapping(
     ] = {}
 
     for cmpn_idx, cmpn_data in enumerate(cmpns_data):
-        for lay, r_idxs in cmpn_data.rgroups.items():
+        for r_idxs in cmpn_data.rgroups.values():
             for r in r_idxs:
                 round = cmpn_data.rounds[r]
-                if len(round) > 1 or (layer and lay != layer):
+                if len(round) > 1:
                     continue
                 key = next(iter(round.keys()))
 
-                if fault_model and fault_model not in key:
+                if (layer and key[0] != layer) or (fault_model and fault_model not in key):
                     continue
 
                 data_map.setdefault(key, {})

@@ -61,12 +61,7 @@ class FaultSite:
         )
 
     def _key(self) -> tuple:
-        if not self.position or len(self.position) == 3:
-            pos_key = (-1,) + self.position
-        else:
-            pos_key = self.position
-
-        return self.layer, pos_key
+        return self.layer, len(self.position), self.position
 
     def is_defined(self) -> bool:
         return (
@@ -158,7 +153,13 @@ class FaultModel:
         )
 
     def _key(self) -> tuple:
-        return self.target, self.method, tuple(map(FaultModel._hashable, self.args))
+        # The concrete class in the key avoids same target/method/args
+        # to be reached by different fault models (e.g. DeadNeuron and
+        # StuckNeuron(0.) both boil down to set_value(0.)).
+        return (
+            type(self), self.target, self.method,
+            tuple(map(FaultModel._hashable, self.args))
+        )
 
     @staticmethod
     def _hashable(arg: 'float | Tensor | list') -> 'float | tuple':
