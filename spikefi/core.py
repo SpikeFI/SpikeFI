@@ -540,6 +540,8 @@ class Campaign:
                 'verbose', 'table', 'pbar', 'silent'
             ] | None = None
     ) -> list[nn.Module]:
+        assert epochs > 0, 'run_train() requires at least 1 training epoch'
+
         if self.device.type == 'cuda':
             torch.cuda.synchronize(self.device)
         t_wall = time()

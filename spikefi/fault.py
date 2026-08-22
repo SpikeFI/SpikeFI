@@ -617,7 +617,14 @@ class FaultRound(dict):  # dict[tuple[str, FaultModel], Fault]
         oround = OptimizedFaultRound(
             self, layers_info, late_start_en, early_stop_en
         )
-        oround.fault_map = deepcopy(self.fault_map)
+        # Sort in ascending order of layer appearance (late-start layer
+        # first), matching the round's own fault ordering above
+        oround.fault_map = dict(
+            sorted(
+                deepcopy(self.fault_map).items(),
+                key=lambda item: layers_info.index(item[0])
+            )
+        )
 
         # Shallow copy: the optimized round shares this round's Fault
         # objects, so its grouped view must reference the same ones
@@ -645,14 +652,6 @@ class OptimizedFaultRound(FaultRound):
                 )
             )
         )
-        self.fault_map = dict(
-            sorted(
-                self.fault_map.items(),
-                key=lambda item: layers_info.index(item[0])
-            )
-        )
-
-        self.is_out_faulty = any(layers_info.is_output(key[0]) for key in self)
 
         # The following code is useful only in the "evaluate optimized" method
 
@@ -671,7 +670,7 @@ class OptimizedFaultRound(FaultRound):
         self.late_start_en = late_start_en
         self.late_start_name = layers_info.order[0]
         self.late_start_idx = 0
-        self.early_stop_en = early_stop_en and not self.is_out_faulty
+        self.early_stop_en = early_stop_en
         self.early_stop_name = None
         self.early_stop_idx = None
 
@@ -705,8 +704,9 @@ class OptimizedFaultRound(FaultRound):
                 else None
             )
 
-            # Early-Stop is meaningful only when at least
-            # the 2 last layers are fault-free
+            # Early-Stop is meaningful only when at least the 2 last layers
+            # are fault-free (the output layer and the synthetic 'tail'
+            # layer Campaign always appends after it)
             if self.early_stop_idx >= len(layers_info) - 2:
                 self.early_stop_en = False
                 self.early_stop_name = None

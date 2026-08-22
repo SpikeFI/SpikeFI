@@ -153,7 +153,9 @@ class LayersInfo:
         return self.weightables.get(name, False)
 
     def is_output(self, name: str) -> bool:
-        return name == self.order[-1]
+        # order[-1] is always the synthetic 'tail' layer Campaign appends,
+        # so the network's real output is the layer before it.
+        return len(self.order) >= 2 and name == self.order[-2]
 
     def infer_hook_wrapper(
             self,
