@@ -105,7 +105,14 @@ def _title(
 
     if len(data_map) == 1 and plot_type == "heat":
         fm = next(iter(data_map.keys()))[1]
-        title_def = "_" + str(int(fm.args[0]))
+        # BitflippedSynapse normalizes its bit arg to a tuple (possibly
+        # multiple bits), unlike other models' single-value first arg
+        arg0 = fm.args[0]
+        title_def = (
+            "_" + "-".join(str(int(b)) for b in arg0)
+            if isinstance(arg0, tuple)
+            else "_" + str(int(arg0))
+        )
     elif len(data_map) > 1:
         model = next(iter(data_map.keys()))[1]
         one_m = True

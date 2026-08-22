@@ -1173,6 +1173,7 @@ class Campaign:
     def save_net(
             self,
             net: nn.Module | None = None,
+            *,
             round_idx: int | None = None,
             fname: str | None = None
     ) -> None:
