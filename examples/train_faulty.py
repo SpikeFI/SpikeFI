@@ -129,12 +129,30 @@ faulties = cmpn.run_train(
     make_scheduler
 )
 
-# Save trained networks
-for faulty in faulties:
-    cmpn.save_net(faulty)
+# Save trained networks, alongside the round each was trained with so
+# their neuron/parametric faults reload correctly too.
+net_fnames = [f'{cmpn_name}_r{r}' for r in range(len(faulties))]
+for r, fname in enumerate(net_fnames):
+    cmpn.save_net(round_idx=r, fname=fname)
 
 # Save results in a pickle file
 cmpn.save()
+
+# Reload the faulty networks: load_net() rebuilds each net from its saved
+# state_dict and re-attaches that round's neuron/parametric fault hooks,
+# bound directly to the saved round so a freshly loaded net forwards
+# exactly like faulties[r] above, with no live Campaign required.
+# Persistent synapse faults are baked into the state_dict, so they reload on
+# their own, but nothing keeps re-clamping them if this reloaded net is trained
+# further outside a campaign carrying that same fault.
+loaded_faulties = []
+for fname in net_fnames:
+    loaded = sfi.Campaign.load_net(
+        sfi.utils.io.make_net_filepath(fname + '.pt'),
+        demo.Network(demo.net_params),
+        device=demo.device
+    )
+    loaded_faulties.append(loaded)
 
 # Plot and save the learning curve(s)
 figs = sfi.visual.learning_curve(cmpn.export(), format='png')
