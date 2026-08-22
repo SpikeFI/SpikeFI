@@ -16,7 +16,6 @@
 
 
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import dataclass, field
 import random
 from typing import Any, Iterable, Literal, Sequence
@@ -141,10 +140,12 @@ class ParametricNeuronFaultModel(FaultModel):
             self.param_original, *self.param_args
         )
 
-        dummy = deepcopy(slayer)
-        dummy.neuron[self.param_name] = self.param_perturbed
+        # Only neuron/simulation dicts are needed to build the dummy layer,
+        # so a shallow copy of the dict suffices
+        neuron = dict(slayer.neuron)
+        neuron[self.param_name] = self.param_perturbed
 
-        self.flayer = spikeLayer(dummy.neuron, dummy.simulation).to(device)
+        self.flayer = spikeLayer(neuron, slayer.simulation).to(device)
 
     def param_restore(self) -> None:
         self.flayer.neuron[self.param_name] = self.param_original

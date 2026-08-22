@@ -350,8 +350,10 @@ class Fault:
         return len(self) > 1
 
     def unroll(self) -> tuple[Tensor, ...]:
+        sites = sorted(self.sites, key=lambda s: s.position)
         # Grouped unrolled site indices per dimension
-        unrolled_per_dim = zip(*(s.position for s in self.sites))
+        # Sort by position for a canonical, deterministic order
+        unrolled_per_dim = zip(*(s.position for s in sites))
         return tuple(
             torch.tensor(v, dtype=torch.int64) for v in unrolled_per_dim
         )

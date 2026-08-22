@@ -1310,7 +1310,7 @@ class CampaignData:
 
         self.golden = deepcopy(campaign.golden).to('cpu')
         self.slayer = deepcopy(campaign.slayer)
-        self.device = deepcopy(campaign.device)
+        self.device = campaign.device  # torch.device is immutable
 
         self.layers_info = deepcopy(campaign.layers_info)
 
@@ -1320,8 +1320,9 @@ class CampaignData:
         )
 
         self.duration = campaign.duration
-        self.rounds = deepcopy(campaign.rounds)
-        self.orounds = deepcopy(campaign.orounds)
+        # Copy rounds/orounds in one deepcopy call so exported data keeps their
+        # live Fault-object sharing (optimized() shallow-copies Faults in)
+        self.rounds, self.orounds = deepcopy((campaign.rounds, campaign.orounds))
         self.rgroups = deepcopy(campaign.rgroups)
         self.performance = deepcopy(campaign.performance)
 
