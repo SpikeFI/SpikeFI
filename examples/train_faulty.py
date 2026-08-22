@@ -133,7 +133,7 @@ faulties = cmpn.run_train(
 # their neuron/parametric faults reload correctly too.
 net_fnames = [f'{cmpn_name}_r{r}' for r in range(len(faulties))]
 for r, fname in enumerate(net_fnames):
-    cmpn.save_net(round_idx=r, fname=fname)
+    cmpn.save_net(r, fname=fname)
 
 # Save results in a pickle file
 cmpn.save()

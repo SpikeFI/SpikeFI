@@ -155,7 +155,8 @@ def bar(
         fig_size: tuple[float, float] | None = None,
         title_suffix: str | None = None,
         format: str = 'svg',
-        to_save: bool = True
+        to_save: bool = True,
+        rename: bool = True
 ) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -229,14 +230,15 @@ def bar(
                 "bar",
                 title_suffix,
                 format
-            )
+            ),
+            rename=rename
         )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
     return fig
 
 
-def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
+def colormap(format: str = 'svg', to_save: bool = True, rename: bool = True) -> Figure:
     fig = plt.figure()
     fig.set_size_inches(fig.get_figwidth(), 1)
 
@@ -255,7 +257,8 @@ def colormap(format: str = 'svg', to_save: bool = True) -> Figure:
 
     if to_save:
         plot_path = make_fig_filepath(
-            fname="colormap." + format.removeprefix('.')
+            fname="colormap." + format.removeprefix('.'),
+            rename=rename
         )
         plt.savefig(plot_path, transparent=True)
 
@@ -274,7 +277,8 @@ def heat(
         fig_size: tuple[float, float] | None = None,
         title_suffix: str | None = None,
         format: str = 'svg',
-        to_save: bool = True
+        to_save: bool = True,
+        rename: bool = True
 ) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -374,7 +378,8 @@ def heat(
                     model_friendly, "heat",
                     title_suffix,
                     format
-                )
+                ),
+                rename=rename
             )
             plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
@@ -392,7 +397,8 @@ def plot(
         fig_size: tuple[float, float] | None = None,
         title_suffix: str | None = None,
         format: str = 'svg',
-        to_save: bool = True
+        to_save: bool = True,
+        rename: bool = True
 ) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -459,7 +465,8 @@ def plot(
                 "scatter",
                 title_suffix,
                 format
-            )
+            ),
+            rename=rename
         )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
@@ -472,7 +479,8 @@ def plot_train(
         fig_size: tuple[float, float] | None = None,
         title_suffix: str | None = None,
         format: str = 'svg',
-        to_save: bool = True
+        to_save: bool = True,
+        rename: bool = True
 ) -> Figure:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -512,7 +520,8 @@ def plot_train(
         common_name = re.sub(r'(_net)\d+', r'\1', cmpns_data[0].name)
 
         plot_path = make_fig_filepath(
-            f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}"
+            f"{common_name}_mean{title_suffix or ''}.{format.strip('.')}",
+            rename=rename
         )
         plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
@@ -524,7 +533,8 @@ def learning_curve(
         fig_size: tuple[float, float] | None = None,
         title_suffix: str | None = None,
         format: str = 'svg',
-        to_save: bool = True
+        to_save: bool = True,
+        rename: bool = True
 ) -> list[Figure]:
     if isinstance(cmpns_data, CampaignData):
         cmpns_data = [cmpns_data]
@@ -564,7 +574,8 @@ def learning_curve(
 
                 plot_path = make_fig_filepath(
                     f"{cmpn_data.name}_learning{title_suffix or ''}."
-                    + f"{format.strip('.')}"
+                    + f"{format.strip('.')}",
+                    rename=rename
                 )
                 plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 

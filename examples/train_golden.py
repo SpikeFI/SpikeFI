@@ -86,7 +86,7 @@ golden = cmpn.run_train(
 )[0]
 
 # Save trained network
-cmpn.save_net(golden, fname=demo.get_fnetname(trial).split('.')[0])
+cmpn.save_net(0, fname=demo.get_fnetname(trial).split('.')[0])
 
 # Plot and save the learning curve(s)
 sfi.visual.learning_curve(cmpn.export(), format='png')

@@ -797,7 +797,7 @@ class Campaign:
             round: sff.FaultRound,
             faulty: nn.Module
     ) -> None:
-        for layer_name, hook in Campaign._attach_neuron_hooks_train(
+        for layer_name, hook in Campaign._attach_direct_neuron_hooks(
                 faulty, round, self.layers_info, self.slayer, self.device
         ):
             self.direct_hooks[(r, layer_name, type(hook))] = hook
@@ -822,7 +822,7 @@ class Campaign:
         )
 
     @staticmethod
-    def _attach_neuron_hooks_train(
+    def _attach_direct_neuron_hooks(
             net: nn.Module,
             round: sff.FaultRound,
             layers_info: LayersInfo,
@@ -1172,35 +1172,52 @@ class Campaign:
 
     def save_net(
             self,
-            net: nn.Module | None = None,
-            *,
-            round_idx: int | None = None,
-            fname: str | None = None
-    ) -> None:
-        if round_idx is not None:
-            # round_idx forces the actual faulty net trained for that round,
-            # ignoring `net`, so the saved state_dict and round always match
-            assert hasattr(self, 'faulties'), (
-                'save_net(round_idx=...) requires run_train() to have returned first'
-            )
+            round_idx: int,
+            fname: str | None = None,
+            rename: bool = True
+    ) -> str:
+        round = self.rounds[round_idx]
 
+        if hasattr(self, 'faulties'):
+            # Pre-training campaign: each round trained its own net, so
+            # synapse faults are already baked into its weights.
             to_save = self.faulties[round_idx]
+        else:
+            # Post-training (or golden) campaign: self.faulty is shared
+            # across rounds and its weights are restored after every
+            # forward pass, so build a private copy and write this round's
+            # synapse faults directly into golden's own weights instead.
+            to_save = deepcopy(self.golden)
+            with torch.no_grad():
+                for layer_name in self.layers_info.get_injectables():
+                    if not round.any_synaptic(layer_name):
+                        continue
+
+                    layer = getattr(to_save, layer_name)
+                    for fault in round.grouped[(layer_name, sff.FaultTarget.WEIGHT)]:
+                        all_ind = fault.unroll()
+                        layer.weight[all_ind] = fault.model.perturb(layer.weight[all_ind])
+
+        if round:
+            # Hard and parametric neuron faults cannot be baked into weights,
+            # so the round travels alongside the state_dict for load_net to
+            # reattach their hooks.
             payload = {
                 'state_dict': to_save.state_dict(),
-                'round': deepcopy(self.rounds[round_idx]),
+                'round': deepcopy(round),
                 'layers_info': deepcopy(self.layers_info),
                 'slayer': deepcopy(self.slayer),
             }
         else:
-            to_save = net or self.faulty
-            if not to_save:
-                return
+            # Empty round (no faults injected, so store only state_dict)
             payload = to_save.state_dict()
 
-        torch.save(
-            payload,
-            sfio.make_net_filepath((fname or self.name) + '.pt', rename=True)
+        fpath = sfio.make_net_filepath(
+            (fname or f"{self.name}_r{round_idx}") + '.pt', rename
         )
+        torch.save(payload, fpath)
+
+        return fpath
 
     @staticmethod
     def load_net(
@@ -1210,9 +1227,9 @@ class Campaign:
     ) -> nn.Module:
         payload = torch.load(fpath, map_location=device, weights_only=False)
 
-        # A file from save_net(round_idx=...) is the envelope dict below.
-        # A file from save_net() without round_idx is a bare state_dict,
-        # with no fault info to reattach.
+        # A file from save_net() for a round carrying faults is the
+        # envelope dict below. A file from an empty (golden) round
+        # is a bare state_dict with no fault info to reattach.
         if isinstance(payload, dict) and 'state_dict' in payload:
             state_dict = payload['state_dict']
             round = payload.get('round')
@@ -1233,7 +1250,7 @@ class Campaign:
             )
 
         if round:
-            Campaign._attach_neuron_hooks_train(faulty, round, layers_info, slayer, device)
+            Campaign._attach_direct_neuron_hooks(faulty, round, layers_info, slayer, device)
 
         faulty.eval()
         return faulty
