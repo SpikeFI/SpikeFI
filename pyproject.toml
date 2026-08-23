@@ -23,5 +23,29 @@ requires-python = ">=3.11"
 readme = "README.md"
 license = { file = "LICENSE" }
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.setuptools]
 packages = ["spikefi", "spikefi.utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "tier0: pure functions & data structures (CPU-only, no network)",
+    "tier1: fault semantics (exact/differential/cross-path oracles)",
+    "tier2: propagation of a fault's local effect to later layers",
+    "tier3: metamorphic invariants (optimizations, round isolation, eject)",
+    "tier4: training mode (run_train, persistence, self-containment)",
+    "tier5: serialization (save/load/export, net persistence, copy semantics)",
+    "tier6: visual.py correctness",
+    "gpu: requires CUDA, auto-applied to every test outside tests/tier0_units/",
+    "neuron: neuron fault models and hooks",
+    "synapse: synapse fault models and hooks",
+    "parametric: parametric neuron fault models",
+    "optimization: campaign optimization levels (O0-O4)",
+    "training: training-mode (run_train) behaviour",
+    "serialization: save/load/export round-trips",
+    "visual: visual.py plotting correctness",
+]
