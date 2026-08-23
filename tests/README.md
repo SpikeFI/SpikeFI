@@ -7,7 +7,7 @@ artifacts are named.
 
 | Tier | Directory | Proves | CPU/GPU | Target runtime |
 |---|---|---|---|---|
-| 0 | `tier0_units/` | pure functions & data structures | CPU | < 2 s |
+| 0 | `tier0_units/` | pure functions & data structures | CPU | ~0.1 s |
 | 1 | `tier1_semantics/` | fault semantics (exact/differential/cross-path oracles) | GPU | — |
 | 2 | `tier2_propagation/` | a fault's local effect reaches the next layer | GPU | — |
 | 3 | `tier3_invariants/` | metamorphic invariants: O0-O4 agreement, round isolation, `eject()` | GPU | — |
@@ -61,6 +61,12 @@ Defined in `conftest.py`:
 `assert_differs`), hand-built fault mutants for the differential oracle (`hand_mutate_weight`,
 `hand_mutate_neuron_output`), and a layer-invocation probe (`count_invocations`) for the Tier 3
 work-counting tests.
+
+`tier0_units/conftest.py` adds two CPU-only fixtures local to that tier: `layers_info`, a
+`LayersInfo` populated by calling `dense_net`'s layers directly instead of through its own forward
+(which would route through the CUDA-only `slayer.psp()`/`spike()`), and `campaign_stub`, a `Campaign`
+built without `__init__` so `validate()`/`inject()` can be exercised without the GPU-only forward
+pass `__init__` performs to infer layer shapes.
 
 ## Artifacts
 
