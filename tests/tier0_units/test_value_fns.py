@@ -69,7 +69,9 @@ def test_qua_value_matches_hand_computed_quantization(
 
 
 @pytest.mark.synapse
-def test_qua_value_is_idempotent(qargs: tuple[float, int, torch.dtype]) -> None:
+def test_qua_value_is_idempotent(
+        qargs: tuple[float, int, torch.dtype]
+) -> None:
     """Quantizing an already-quantized value leaves it unchanged: qua_value
     snaps onto a fixed grid, so a second pass is a no-op."""
     scale, zero_point, dtype = qargs

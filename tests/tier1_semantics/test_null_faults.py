@@ -4,18 +4,29 @@ output must match golden bit-for-bit.
 """
 
 
+from collections.abc import Callable
+
 import pytest
 import torch
+from torch import nn, Tensor
+
+from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import PerturbedSynapse, StuckSynapse, ThresholdFaultNeuron
 
+from nets import NetSpec
 from helpers import run_round
 
 
 @pytest.mark.parametric
-def test_threshold_fault_at_1x_is_a_no_op(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_threshold_fault_at_1x_is_a_no_op(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """ThresholdFaultNeuron(1.0) multiplies theta by 1.0: the perturbed
     threshold must equal the original exactly -- checked directly on the
     dummy layer's own parameter, since a wrong theta can still fail to flip
@@ -36,7 +47,12 @@ def test_threshold_fault_at_1x_is_a_no_op(dense_net, slayer, make_campaign, fixe
 
 
 @pytest.mark.synapse
-def test_perturbed_synapse_at_1x_is_a_no_op(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_perturbed_synapse_at_1x_is_a_no_op(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """PerturbedSynapse(1.0) multiplies the weight by 1.0: a provable
     no-op, so the faulty output must match golden bit-for-bit."""
     cmpn = make_campaign(dense_net.net, dense_net.shape_in, slayer)
@@ -51,7 +67,12 @@ def test_perturbed_synapse_at_1x_is_a_no_op(dense_net, slayer, make_campaign, fi
 
 
 @pytest.mark.synapse
-def test_stuck_synapse_at_original_value_is_a_no_op(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_stuck_synapse_at_original_value_is_a_no_op(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """StuckSynapse(w_original) sets the weight to its own current value:
     a provable no-op, so the faulty output must match golden bit-for-bit.
     Also captures the weight actually used *during* the forward pass, since

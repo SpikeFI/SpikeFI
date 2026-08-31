@@ -4,19 +4,27 @@ other Tier 1 oracle trusts campaign.golden(x) as ground truth.
 """
 
 
+from collections.abc import Callable
 from copy import deepcopy
 
 import pytest
 import torch
+from torch import nn, Tensor
+
+from slayerSNN.slayer import spikeLayer
+
+import spikefi as sfi
+
+from nets import NetSpec
 
 
 @pytest.mark.neuron
 @pytest.mark.synapse
 def test_golden_forward_matches_the_network_own_forward(
-        dense_net,
-        slayer,
-        make_campaign,
-        fixed_input
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
 ) -> None:
     """campaign.golden(x) reproduces type(net).forward(net, x) -- the
     network's own, un-wrapped forward -- bit-identically. If this doesn't
@@ -33,9 +41,9 @@ def test_golden_forward_matches_the_network_own_forward(
 @pytest.mark.neuron
 @pytest.mark.synapse
 def test_golden_slayer_neuron_matches_net_slayer_neuron(
-        dense_net,
-        slayer,
-        make_campaign
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign]
 ) -> None:
     """The campaign's own slayer.neuron dict (deepcopied at construction)
     still matches the original net's slayer.neuron: if these diverged, the
@@ -49,10 +57,10 @@ def test_golden_slayer_neuron_matches_net_slayer_neuron(
 @pytest.mark.neuron
 @pytest.mark.synapse
 def test_deepcopied_net_forward_rebinds_to_the_copy(
-        dense_net,
-        slayer,
-        make_campaign,
-        fixed_input
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
 ) -> None:
     """A deepcopy of campaign.golden's forward is re-bound to the new
     object, not left pointing at the original -- Campaign.reset() relies on

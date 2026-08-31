@@ -4,18 +4,29 @@ end-to-end answer through the tail on an output-layer site.
 """
 
 
+from collections.abc import Callable
+
 import pytest
 import torch
+from torch import nn, Tensor
 from torch.utils.data import DataLoader, TensorDataset
+
+from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import DeadNeuron, SaturatedNeuron, StuckNeuron
 
+from nets import NetSpec
 from helpers import assert_active, assert_differs
 
 
-def _capture_following_input(cmpn: sfi.Campaign, following_name: str, x, round_idx: int = 0):
+def _capture_following_input(
+        cmpn: sfi.Campaign,
+        following_name: str,
+        x: Tensor,
+        round_idx: int = 0
+) -> Tensor:
     """Runs round `round_idx` and returns the exact tensor the following
     layer received as input, captured via a pre-hook registered after the
     fault pre-hook so it observes the already-perturbed value."""
@@ -32,7 +43,11 @@ def _capture_following_input(cmpn: sfi.Campaign, following_name: str, x, round_i
 
 @pytest.mark.neuron
 def test_dead_neuron_sets_next_layer_input_to_exactly_zero(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """DeadNeuron is set_value(_, 0.): the following layer's input at the
     fault site is exactly 0.0 for every batch sample and time bin."""
@@ -52,7 +67,11 @@ def test_dead_neuron_sets_next_layer_input_to_exactly_zero(
 
 @pytest.mark.neuron
 def test_saturated_neuron_sets_next_layer_input_to_exactly_one(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """SaturatedNeuron is set_value(_, 1.): the following layer's input at
     the fault site is exactly 1.0 for every batch sample and time bin."""
@@ -78,7 +97,11 @@ def test_saturated_neuron_sets_next_layer_input_to_exactly_one(
 
 @pytest.mark.neuron
 def test_stuck_neuron_sets_next_layer_input_to_exactly_x(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """StuckNeuron(x) is set_value(_, x): the following layer's input at
     the fault site is exactly x for every batch sample and time bin."""
@@ -100,7 +123,9 @@ def test_stuck_neuron_sets_next_layer_input_to_exactly_x(
 
 @pytest.mark.neuron
 def test_saturated_neuron_end_to_end_forces_prediction_and_accuracy(
-        dense_net, slayer, make_campaign
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign]
 ) -> None:
     """SaturatedNeuron on an output-layer neuron o propagates untouched
     through the synthetic tail: output[:,o,0,0,:] is 1.0 at every time bin,
@@ -141,7 +166,9 @@ def test_saturated_neuron_end_to_end_forces_prediction_and_accuracy(
 
 @pytest.mark.neuron
 def test_dead_neuron_end_to_end_reduces_accuracy_by_the_dead_class_rate(
-        dense_net, slayer, make_campaign
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign]
 ) -> None:
     """DeadNeuron on an output-layer neuron o forces that channel to 0
     forever: every sample the golden net correctly predicted as o is now

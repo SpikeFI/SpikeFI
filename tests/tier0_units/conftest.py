@@ -9,12 +9,16 @@ import pytest
 import torch
 from torch import nn
 
+from slayerSNN.slayer import spikeLayer
+
 import spikefi as sfi
 from spikefi.utils.layer import LayersInfo
 
+from nets import NetSpec
+
 
 @pytest.fixture
-def layers_info(dense_net) -> LayersInfo:
+def layers_info(dense_net: NetSpec) -> LayersInfo:
     """LayersInfo for dense_net's SF1 -> SF2 -> tail chain, populated by
     calling each layer directly instead of through the net's own forward,
     which would route through slayer.psp()/spike()."""
@@ -32,7 +36,7 @@ def layers_info(dense_net) -> LayersInfo:
 
 
 @pytest.fixture
-def campaign_stub(layers_info: LayersInfo, slayer) -> sfi.Campaign:
+def campaign_stub(layers_info: LayersInfo, slayer: spikeLayer) -> sfi.Campaign:
     """A Campaign built without calling __init__, so validate()/inject()
     can be exercised without the GPU-only forward pass __init__ performs
     to infer layer shapes."""

@@ -5,23 +5,33 @@ weight-value oracle, and post-round stash hygiene.
 """
 
 
+from collections.abc import Callable
 from copy import deepcopy
 
 import pytest
 import torch
+from torch import nn, Tensor
+
+from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import DeadNeuron, DeadSynapse, PerturbedSynapse, StuckSynapse
 from spikefi.utils.quantization import qargs_from_range
 
+from nets import NetSpec
 from helpers import hand_mutate_weight, run_round
 
 
 SITE = (0, 0, 0, 0)
 
 
-def _find_nonvacuous_sf1_site(dense_net, x, golden_sf1, build_model):
+def _find_nonvacuous_sf1_site(
+        dense_net: NetSpec,
+        x: Tensor,
+        golden_sf1: Tensor,
+        build_model: Callable[[float], sff.FaultModel]
+) -> tuple[tuple[int, int, int, int], sff.FaultModel]:
     """SF2's own threshold is high enough relative to this tiny net's
     default-initialized weights that its output rarely fires at all, no
     matter what SF1 does -- so this searches for a site whose effect is
@@ -47,7 +57,13 @@ def _find_nonvacuous_sf1_site(dense_net, x, golden_sf1, build_model):
     pytest.param(lambda w: StuckSynapse(w + 0.3), id='StuckSynapse'),
     pytest.param(lambda w: PerturbedSynapse(1.5), id='PerturbedSynapse'),
 ])
-def test_weight_fault_matches_hand_mutant(dense_net, slayer, make_campaign, fixed_input, build_model) -> None:
+def test_weight_fault_matches_hand_mutant(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        build_model: Callable[[float], sff.FaultModel]
+) -> None:
     """A WEIGHT fault's output is bit-identical to directly overwriting the
     same weight site by hand, bypassing SpikeFI's machinery entirely.
     Compared at SF1's own output, the layer the fault is actually on, since
@@ -74,7 +90,12 @@ def test_weight_fault_matches_hand_mutant(dense_net, slayer, make_campaign, fixe
 
 @pytest.mark.synapse
 @pytest.mark.neuron
-def test_dead_weight_column_matches_dead_neuron(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_dead_weight_column_matches_dead_neuron(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """Zeroing every SF2 weight fed by one SF1 output neuron (a 'dead
     column') must reproduce a DeadNeuron fault on that SF1 neuron
     bit-for-bit: two separate hook paths (WEIGHT pre/post hooks on SF2 vs.
@@ -112,7 +133,12 @@ def test_dead_weight_column_matches_dead_neuron(dense_net, slayer, make_campaign
 
 
 @pytest.mark.synapse
-def test_dead_synapse_zeroes_the_output_row(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_dead_synapse_zeroes_the_output_row(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """DeadSynapse on every weight feeding output neuron o zeroes that
     neuron's entire row of the network's final output exactly -- on a row
     that actually fired beforehand, or zeroing it would prove nothing."""
@@ -135,7 +161,10 @@ def test_dead_synapse_zeroes_the_output_row(dense_net, slayer, make_campaign, fi
 
 @pytest.mark.synapse
 def test_bitflipped_synapse_uses_the_independently_computed_bfl_value(
-        dense_net, slayer, make_campaign, fixed_input
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
 ) -> None:
     """The weight actually used during forward for a BitflippedSynapse
     fault has exactly the named bit flipped in its quantized integer
@@ -176,7 +205,12 @@ def test_bitflipped_synapse_uses_the_independently_computed_bfl_value(
 
 
 @pytest.mark.synapse
-def test_weight_fault_stash_is_not_none_after_a_round(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_weight_fault_stash_is_not_none_after_a_round(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """After running a round, a WEIGHT fault's cached perturbed value is
     still populated (unlike a PARAMETER fault's, which unstore() clears),
     since the restore hook only reads it back, never clears it."""

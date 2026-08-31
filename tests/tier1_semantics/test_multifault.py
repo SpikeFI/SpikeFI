@@ -5,17 +5,28 @@ independently of what else is in the batch.
 """
 
 
+from collections.abc import Callable
+
 import pytest
 import torch
+from torch import nn, Tensor
+
+from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import DeadNeuron, DeadSynapse, ThresholdFaultNeuron
 
+from nets import NetSpec
 from helpers import assert_active
 
 
-def _capture_following_input(cmpn: sfi.Campaign, following_name: str, x, round_idx: int = 0):
+def _capture_following_input(
+        cmpn: sfi.Campaign,
+        following_name: str,
+        x: Tensor,
+        round_idx: int = 0
+) -> Tensor:
     """Runs `round_idx` and returns the exact tensor the following layer
     received as input, captured after the fault pre-hook has already run."""
     cmpn._pre_run(sfi.CampaignOptimization.O0)
@@ -32,7 +43,11 @@ def _capture_following_input(cmpn: sfi.Campaign, following_name: str, x, round_i
 @pytest.mark.neuron
 @pytest.mark.synapse
 def test_locality_with_simultaneous_faults_on_different_layers(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """A neuron fault on SF1 and a synapse fault on SF2, injected in the
     same round, each affect only their own site: every other position of
@@ -61,7 +76,11 @@ def test_locality_with_simultaneous_faults_on_different_layers(
 
 @pytest.mark.neuron
 def test_fault_applies_to_every_batch_sample_and_time_bin(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """A DeadNeuron fault zeroes its site for every sample in the batch and
     every time bin, not just the specific (sample, bin) pairs that happened
@@ -84,7 +103,10 @@ def test_fault_applies_to_every_batch_sample_and_time_bin(
 
 @pytest.mark.parametric
 def test_fault_result_identical_regardless_of_other_batch_members(
-        dense_net, slayer, make_campaign, fixed_input
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
 ) -> None:
     """The same sample's faulty result is identical whether it runs alone
     (batch of 1) or alongside three other samples (batch of 4): the fault

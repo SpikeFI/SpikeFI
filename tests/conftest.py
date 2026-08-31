@@ -5,8 +5,7 @@ tests/README.md for usage.
 """
 
 
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
 from pathlib import Path
 import re
 
@@ -19,6 +18,8 @@ from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.utils.io as sfio
+
+from nets import NetSpec
 
 
 # --- Tier/gpu auto-marking ---
@@ -137,12 +138,6 @@ def slayer(net_params: dict, device: torch.device) -> spikeLayer:
 
 # --- Tiny synthetic nets ---
 
-@dataclass
-class NetSpec:
-    net: nn.Module
-    shape_in: tuple[int, int, int]
-
-
 class _DenseNet(nn.Module):
     """Two chained dense layers: the minimal injectable-injectable topology."""
 
@@ -248,7 +243,7 @@ def same_shape_shared_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
 # --- Seeded inputs & datasets ---
 
 @pytest.fixture
-def fixed_input(device: torch.device):
+def fixed_input(device: torch.device) -> Callable[..., Tensor]:
     """Factory returning a seeded spike tensor for a given (shape_in, batch,
     n_time_bins, p): deterministic across calls with the same arguments."""
     def _fixed_input(
@@ -256,7 +251,7 @@ def fixed_input(device: torch.device):
             batch: int = 4,
             n_time_bins: int = 16,
             p: float = 0.3,
-            seed: int = 42,
+            seed: int = 42
     ) -> Tensor:
         assert batch >= 2, 'fixed_input requires batch >= 2'
         generator = torch.Generator(device=device).manual_seed(seed)
@@ -269,7 +264,7 @@ def fixed_input(device: torch.device):
 
 
 @pytest.fixture
-def tiny_loaders(device: torch.device):
+def tiny_loaders(device: torch.device) -> Callable[..., tuple[DataLoader, DataLoader]]:
     """Factory building a seeded (train_loader, test_loader) TensorDataset
     pair, so run_train() needs no dataset on disk."""
     def _tiny_loaders(
@@ -279,7 +274,7 @@ def tiny_loaders(device: torch.device):
             batch_size: int = 4,
             n_time_bins: int = 16,
             p: float = 0.3,
-            seed: int = 7,
+            seed: int = 7
     ) -> tuple[DataLoader, DataLoader]:
         generator = torch.Generator(device=device).manual_seed(seed)
         x = (torch.rand(
@@ -298,13 +293,16 @@ def tiny_loaders(device: torch.device):
 # --- Campaign factory & activation probe ---
 
 @pytest.fixture
-def make_campaign(artifact_name: str, device: torch.device):
+def make_campaign(
+        artifact_name: str,
+        device: torch.device
+) -> Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign]:
     """Factory building a Campaign named after the calling test, so every
     artifact it writes is traceable back to the test that produced it."""
     def _make_campaign(
             net: nn.Module,
             shape_in: tuple[int, int, int],
-            slayer: spikeLayer,
+            slayer: spikeLayer
     ) -> sfi.Campaign:
         return sfi.Campaign(net, shape_in, slayer, name=artifact_name, device=device)
 
@@ -312,7 +310,7 @@ def make_campaign(artifact_name: str, device: torch.device):
 
 
 @pytest.fixture
-def golden_activity():
+def golden_activity() -> Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]:
     """Factory returning per-layer golden activations for a campaign's
     input, computed via the campaign's own layer-by-layer forward
     (forward_opt) so the result matches exactly what the framework's fault

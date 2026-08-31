@@ -4,17 +4,26 @@ slayer, and post-round stash hygiene.
 """
 
 
+from collections.abc import Callable
+
 import pytest
-import torch
+from torch import nn, Tensor
+
+from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import ThresholdFaultNeuron
 
+from nets import NetSpec
 from helpers import assert_active
 
 
-def _spike_count_at_site(cmpn: sfi.Campaign, x, site: tuple[int, int, int]) -> torch.Tensor:
+def _spike_count_at_site(
+        cmpn: sfi.Campaign,
+        x: Tensor,
+        site: tuple[int, int, int]
+) -> Tensor:
     """Runs round 0 and returns the spike count (summed over batch and
     time) the following layer received at `site`, i.e. after any neuron
     fault at that site has already been applied."""
@@ -31,7 +40,11 @@ def _spike_count_at_site(cmpn: sfi.Campaign, x, site: tuple[int, int, int]) -> t
 
 @pytest.mark.parametric
 def test_threshold_increase_does_not_increase_spike_count(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """ThresholdFaultNeuron(rho > 1) raises theta -> a higher bar to fire,
     so the site's spike count cannot increase relative to golden."""
@@ -57,7 +70,11 @@ def test_threshold_increase_does_not_increase_spike_count(
 
 @pytest.mark.parametric
 def test_threshold_decrease_does_not_decrease_spike_count(
-        dense_net, slayer, make_campaign, fixed_input, golden_activity
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor],
+        golden_activity: Callable[[sfi.Campaign, Tensor], dict[str, Tensor]]
 ) -> None:
     """ThresholdFaultNeuron(rho < 1) lowers theta -> an easier bar to fire,
     so the site's spike count cannot decrease relative to golden."""
@@ -82,7 +99,12 @@ def test_threshold_decrease_does_not_decrease_spike_count(
 
 
 @pytest.mark.parametric
-def test_parametric_fault_isolated_from_campaign_slayer(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_parametric_fault_isolated_from_campaign_slayer(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """param_perturb() builds its dummy layer from a shallow copy of
     slayer.neuron: the campaign's own slayer.neuron is unchanged after a
     round runs, while the fault's dummy flayer holds the perturbed value."""
@@ -103,7 +125,12 @@ def test_parametric_fault_isolated_from_campaign_slayer(dense_net, slayer, make_
 
 
 @pytest.mark.parametric
-def test_parametric_fault_stash_is_none_after_a_round(dense_net, slayer, make_campaign, fixed_input) -> None:
+def test_parametric_fault_stash_is_none_after_a_round(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        fixed_input: Callable[..., Tensor]
+) -> None:
     """After running a round, a PARAMETER fault's cached perturbed value is
     None again -- unlike a WEIGHT fault's, unstore() consumes it during the
     same forward pass that produces it."""

@@ -12,7 +12,9 @@ from spikefi.utils.layer import LayersInfo
 
 
 @pytest.mark.neuron
-def test_out_of_bounds_site_is_dropped(campaign_stub: sfi.Campaign) -> None:
+def test_out_of_bounds_site_is_dropped(
+        campaign_stub: sfi.Campaign
+) -> None:
     """A site whose position falls outside the layer's own shape is
     removed, counted as an invalid site rather than a dropped fault."""
     fault = Fault(DeadNeuron(), FaultSite('SF1', (99, 0, 0)))
@@ -45,7 +47,9 @@ def test_negative_index_is_accepted_and_normalized(
 
 
 @pytest.mark.neuron
-def test_site_less_fault_is_rejected(campaign_stub: sfi.Campaign) -> None:
+def test_site_less_fault_is_rejected(
+        campaign_stub: sfi.Campaign
+) -> None:
     """A Fault with no defined sites is dropped outright: an empty
     unroll() would otherwise silently index the whole tensor."""
     fault = Fault(DeadNeuron(), [])
@@ -74,7 +78,9 @@ def test_unsupported_parametric_param_name_drops_the_fault(
 
 @pytest.mark.neuron
 @pytest.mark.parametric
-def test_validate_counts_are_accurate(campaign_stub: sfi.Campaign) -> None:
+def test_validate_counts_are_accurate(
+        campaign_stub: sfi.Campaign
+) -> None:
     """The returned counts add up to exactly what was dropped and why,
     across a mix of valid, invalid-site and unsupported faults."""
     valid_fault = Fault(DeadNeuron(), FaultSite('SF1', (0, 0, 0)))
@@ -93,7 +99,9 @@ def test_validate_counts_are_accurate(campaign_stub: sfi.Campaign) -> None:
 
 
 @pytest.mark.neuron
-def test_inject_warns_on_invalid_sites(campaign_stub: sfi.Campaign) -> None:
+def test_inject_warns_on_invalid_sites(
+        campaign_stub: sfi.Campaign
+) -> None:
     """inject() surfaces validate()'s drops as a RuntimeWarning, so a
     caller who fed it a bad site finds out instead of silently losing it."""
     fault = Fault(DeadNeuron(), FaultSite('SF1', (99, 0, 0)))

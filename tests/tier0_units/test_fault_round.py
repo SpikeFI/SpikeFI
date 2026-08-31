@@ -100,7 +100,9 @@ def test_fault_map_row_width_matches_fault_target_count() -> None:
 
 @pytest.mark.neuron
 @pytest.mark.synapse
-def test_optimized_carries_grouped_and_fault_map(layers_info: LayersInfo) -> None:
+def test_optimized_carries_grouped_and_fault_map(
+        layers_info: LayersInfo
+) -> None:
     """optimized() carries both grouped and fault_map into the returned
     OptimizedFaultRound, not just the round's own faults."""
     round = FaultRound()
@@ -115,7 +117,9 @@ def test_optimized_carries_grouped_and_fault_map(layers_info: LayersInfo) -> Non
 
 @pytest.mark.neuron
 @pytest.mark.synapse
-def test_optimized_fault_map_ordered_by_layer_index(layers_info: LayersInfo) -> None:
+def test_optimized_fault_map_ordered_by_layer_index(
+        layers_info: LayersInfo
+) -> None:
     """optimized()'s fault_map is ordered by each layer's position in the
     network, earliest layer first, regardless of insertion order."""
     round = FaultRound()

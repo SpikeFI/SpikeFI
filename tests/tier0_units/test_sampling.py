@@ -117,7 +117,9 @@ def test_unrank_pos_is_bijective_with_product() -> None:
 
 
 @pytest.mark.neuron
-def test_inject_warns_on_sampling_shortfall(campaign_stub: sfi.Campaign) -> None:
+def test_inject_warns_on_sampling_shortfall(
+        campaign_stub: sfi.Campaign
+) -> None:
     """Requesting more random sites than a layer has room for discards the
     surplus and surfaces it as a RuntimeWarning, rather than sampling with
     replacement or silently under-delivering."""
