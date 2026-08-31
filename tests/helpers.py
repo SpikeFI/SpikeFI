@@ -1,6 +1,7 @@
 """Shared test helpers: precondition assertions for the non-vacuity oracle,
-hand-built fault mutants for the differential oracle, and layer-invocation
-probes for the optimization work-counting tests.
+hand-built fault mutants for the differential oracle, layer-invocation
+probes for the optimization work-counting tests, and a post-training
+round-execution helper for Tiers 1-3.
 """
 
 
@@ -9,6 +10,26 @@ from contextlib import contextmanager
 
 import torch
 from torch import nn, Tensor
+
+import spikefi as sfi
+
+
+# --- Round execution (post-training FI: pull a round's raw output tensor
+# out directly, since Campaign.run() only exposes aggregate stats) ---
+
+def run_round(
+        campaign: sfi.Campaign,
+        round_idx: int,
+        x: Tensor,
+        opt: sfi.CampaignOptimization = sfi.CampaignOptimization.O0
+) -> Tensor:
+    """Runs `x` through campaign.faulty for one already-injected round, via
+    the same private _pre_run()/faulty() path Campaign.run() itself uses,
+    so the raw output tensor can be inspected directly instead of only the
+    aggregate accuracy/loss stats run() exposes."""
+    campaign._pre_run(opt)
+    campaign.r_idx_ref.r = round_idx
+    return campaign.faulty(x)
 
 
 # --- Precondition assertions (non-vacuity: a fault must have room to act) ---

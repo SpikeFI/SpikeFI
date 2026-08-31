@@ -218,23 +218,30 @@ class _SameShapeSharedNet(nn.Module):
         return self.slayer.spike(self.slayer.psp(self.SF3(d2)))
 
 
+# Each net fixture seeds the global torch RNG explicitly right
+# before construction to favor reproducibility and ensure that
+# weight values do not differ from run to run.
 @pytest.fixture
 def dense_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
+    torch.manual_seed(100)
     return NetSpec(net=_DenseNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture
 def conv_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
+    torch.manual_seed(101)
     return NetSpec(net=_ConvNet(slayer).to(device), shape_in=(1, 6, 6))
 
 
 @pytest.fixture
 def shared_dropout_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
+    torch.manual_seed(102)
     return NetSpec(net=_SharedDropoutNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture
 def same_shape_shared_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
+    torch.manual_seed(103)
     return NetSpec(net=_SameShapeSharedNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
