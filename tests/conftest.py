@@ -152,6 +152,25 @@ class _DenseNet(nn.Module):
         return self.slayer.spike(self.slayer.psp(self.SF2(s)))
 
 
+class _ThreeLayerNet(nn.Module):
+    """Three chained dense layers: the shortest topology in which a round can
+    fault two different layers and still leave the two fault-free trailing
+    layers early stop needs, so the early-stop layer and the late-start layer
+    are distinct rather than collapsing onto the same one."""
+
+    def __init__(self, slayer: spikeLayer) -> None:
+        super().__init__()
+        self.slayer: spikeLayer = slayer
+        self.SF1: nn.Module = slayer.dense(8, 6)
+        self.SF2: nn.Module = slayer.dense(6, 4)
+        self.SF3: nn.Module = slayer.dense(4, 3)
+
+    def forward(self, spikes_in: Tensor) -> Tensor:
+        s = self.slayer.spike(self.slayer.psp(self.SF1(spikes_in)))
+        s = self.slayer.spike(self.slayer.psp(self.SF2(s)))
+        return self.slayer.spike(self.slayer.psp(self.SF3(s)))
+
+
 class _ConvNet(nn.Module):
     """conv -> pool -> dense: conv/dense weight-index-order asymmetry, and a
     non-injectable layer (the pool) sitting between two injectables."""
@@ -220,6 +239,12 @@ class _SameShapeSharedNet(nn.Module):
 def dense_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(100)
     return NetSpec(net=_DenseNet(slayer).to(device), shape_in=(8, 1, 1))
+
+
+@pytest.fixture
+def three_layer_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
+    torch.manual_seed(104)
+    return NetSpec(net=_ThreeLayerNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture

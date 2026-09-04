@@ -1,15 +1,17 @@
 """Shared test helpers: precondition assertions for the non-vacuity oracle,
 hand-built fault mutants for the differential oracle, layer-invocation
-probes for the optimization work-counting tests, and a post-training
-round-execution helper for Tiers 1-3.
+probes for the optimization work-counting tests, and round-execution
+helpers for Tiers 1-3.
 """
 
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 
 import torch
 from torch import nn, Tensor
+from torch.utils.data import DataLoader
 
 import spikefi as sfi
 
@@ -121,3 +123,88 @@ def count_invocations(
     finally:
         for handle in handles:
             handle.remove()
+
+
+def capture_invocation_widths(
+        campaign: sfi.Campaign,
+        layer_names: list[str],
+        test_loader: DataLoader,
+        **run_kwargs: Any
+) -> dict[str, list[int]]:
+    """Like count_invocations, but for a full campaign.run() call, and
+    recording the batch width of each invocation rather than only how many
+    there were: an optimization that drops samples from a forward pass is
+    told apart from one that keeps them by how wide the call is, not by how
+    often it happens. campaign.faulty only exists once run()'s own _pre_run()
+    has built it, so the hooks are attached by wrapping _pre_run itself,
+    right after it returns, rather than by hooking a net that does not yet
+    exist."""
+    widths: dict[str, list[int]] = {name: [] for name in layer_names}
+    handles = []
+
+    original_pre_run = campaign._pre_run
+
+    def _patched_pre_run(opt: sfi.CampaignOptimization) -> None:
+        original_pre_run(opt)
+        for name in layer_names:
+            def _hook(_: nn.Module, inputs: tuple, __: Tensor, name: str = name) -> None:
+                widths[name].append(inputs[0].shape[0])
+
+            handles.append(getattr(campaign.faulty, name).register_forward_hook(_hook))
+
+    campaign._pre_run = _patched_pre_run
+    try:
+        campaign.run(test_loader, **run_kwargs)
+    finally:
+        campaign._pre_run = original_pre_run
+        for handle in handles:
+            handle.remove()
+
+    return widths
+
+
+def count_invocations_during_run(
+        campaign: sfi.Campaign,
+        layer_names: list[str],
+        test_loader: DataLoader,
+        **run_kwargs: Any
+) -> dict[str, int]:
+    """How many times each named layer was invoked over a whole
+    campaign.run() call, regardless of how wide each invocation was."""
+    return {
+        name: len(invocations)
+        for name, invocations in capture_invocation_widths(
+            campaign, layer_names, test_loader, **run_kwargs
+        ).items()
+    }
+
+
+def capture_run_outputs(
+        campaign: sfi.Campaign,
+        test_loader: DataLoader,
+        **run_kwargs: Any
+) -> list[Tensor]:
+    """Runs campaign.run() while intercepting _advance_performance to
+    collect each round's raw output tensor, batch by batch, since run()
+    itself only exposes aggregate accuracy/loss stats. Returns one
+    concatenated tensor per round, in round order."""
+    captured: dict[int, list[Tensor]] = {}
+    original_advance = campaign._advance_performance
+
+    def _spy(
+            output: Tensor,
+            label: Tensor,
+            spike_loss: Any = None,
+            training: bool = False,
+            predict: Tensor | None = None
+    ) -> Any:
+        captured.setdefault(campaign.r_idx_ref.r, []).append(output.clone())
+        return original_advance(output, label, spike_loss, training, predict)
+
+    campaign._advance_performance = _spy
+    try:
+        campaign.run(test_loader, **run_kwargs)
+    finally:
+        campaign._advance_performance = original_advance
+
+    return [torch.cat(captured[r], dim=0) for r in sorted(captured)]
