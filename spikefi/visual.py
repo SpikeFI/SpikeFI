@@ -78,6 +78,21 @@ def _data_mapping(
     return data_map
 
 
+def _model_arg_token(fault_model: sff.FaultModel) -> str:
+    """A fault model's leading argument as it appears in a figure filename.
+    BitflippedSynapse normalizes its bit argument to a tuple (possibly
+    several bits), unlike other models' single-value first argument, and a
+    parametric model's own FaultModel args are empty."""
+    if not fault_model.args:
+        return ""
+
+    arg0 = fault_model.args[0]
+    if isinstance(arg0, tuple):
+        return "-".join(str(int(b)) for b in arg0)
+
+    return str(int(arg0))
+
+
 def _earth_palette() -> None:
     mpl.rcParams['axes.prop_cycle'] = cycler(color=CPAL)
 
@@ -105,25 +120,16 @@ def _title(
 
     if len(data_map) == 1 and plot_type == "heat":
         fm = next(iter(data_map.keys()))[1]
-        # BitflippedSynapse normalizes its bit arg to a tuple (possibly
-        # multiple bits), unlike other models' single-value first arg
-        arg0 = fm.args[0]
-        title_def = (
-            "_" + "-".join(str(int(b)) for b in arg0)
-            if isinstance(arg0, tuple)
-            else "_" + str(int(arg0))
-        )
+        title_def = "_" + _model_arg_token(fm)
     elif len(data_map) > 1:
         model = next(iter(data_map.keys()))[1]
-        one_m = True
-        for _, fm in data_map.keys():
-            one_m &= fm == model
+        one_m = all(fm == model for _, fm in data_map.keys())
 
         if one_m:
-            if model_friendly:
-                title_def = ""
-            else:
-                f"_{model.get_name()}{int(fm.args[0])}"
+            # A friendly name already identifies the single shared model, so
+            # naming it again here would only duplicate it in the filename.
+            if not model_friendly:
+                title_def = f"_{model.get_name()}{_model_arg_token(model)}"
         else:
             title_def = "_comparative"
 
@@ -559,25 +565,25 @@ def learning_curve(
                     label='Testing' + (f' (round {r})' if n_rounds > 1 else '')
                 )
 
-            plt.legend()
-            plt.xlabel('Epoch')
-            plt.ylabel("Accuracy (%)")
-            plt.xlim((1, epochs))
-            plt.ylim((0., 100.))
+        plt.legend()
+        plt.xlabel('Epoch')
+        plt.ylabel("Accuracy (%)")
+        plt.xlim((1, epochs))
+        plt.ylim((0., 100.))
 
-            ax = plt.gca()
-            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax = plt.gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-            if to_save:
-                if title_suffix:
-                    title_suffix = "_" + title_suffix.strip('_')
+        if to_save:
+            if title_suffix:
+                title_suffix = "_" + title_suffix.strip('_')
 
-                plot_path = make_fig_filepath(
-                    f"{cmpn_data.name}_learning{title_suffix or ''}."
-                    + f"{format.strip('.')}",
-                    rename=rename
-                )
-                plt.savefig(plot_path, bbox_inches='tight', transparent=False)
+            plot_path = make_fig_filepath(
+                f"{cmpn_data.name}_learning{title_suffix or ''}."
+                + f"{format.strip('.')}",
+                rename=rename
+            )
+            plt.savefig(plot_path, bbox_inches='tight', transparent=False)
 
         figs.append(fig)
 

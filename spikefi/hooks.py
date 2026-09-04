@@ -30,20 +30,23 @@ class RoundIndex:
         self.r = r
 
 
+# Where the optimized forward currently is in LayersInfo.order, shared by
+# reference with the neuron pre-hooks. A module used more than once by the
+# network (a shared dropout, say) occupies one position per invocation, so
+# a position identifies which of those invocations is running.
+class LayerPosition:
+    def __init__(self, p: int = -1):
+        self.p = p
+
+
 # Pre-hook on the layer succeeding a faulty layer: overwrites the
 # incoming spikes at each fault site with its perturbed value.
 def _perturb_neuron_spikes(
         faults: list[sff.Fault],
         prev_spikes_out: Tensor,
-        layer_shape: tuple[int, int, int],
         layer_name: str
 ) -> None:
     if not faults:
-        return
-
-    # Verify that the pre-hook attached on shared
-    # dropout layers is executed after the faulty layer
-    if prev_spikes_out.shape[1:4] != layer_shape:
         return
 
     for fault in faults:
@@ -165,13 +168,15 @@ class DispatchingNeuronPerturbPreHook(DispatchingFaultHook):
             actual_round_idx: RoundIndex,
             rounds_ref: Sequence[sff.FaultRound],
             layer_name: str,
-            layer_shape: tuple[int, int, int]
+            position_ref: LayerPosition,
+            following_pos: int
     ) -> None:
         super().__init__(
             actual_round_idx, rounds_ref, layer_name,
             sff.FaultTarget.neuronal()
         )
-        self.layer_shape = layer_shape
+        self.position_ref = position_ref
+        self.following_pos = following_pos
 
     # Neuronal faults span two targets, which are grouped separately
     def _active_faults(self) -> list[sff.Fault]:
@@ -182,9 +187,14 @@ class DispatchingNeuronPerturbPreHook(DispatchingFaultHook):
         )
 
     def __call__(self, _, inputs: tuple[Tensor, ...]) -> None:
+        # The module this pre-hook sits on may be invoked several times per
+        # forward pass; only the invocation directly following the faulty
+        # layer carries that layer's spikes.
+        if self.position_ref.p != self.following_pos:
+            return
+
         _perturb_neuron_spikes(
-            self._active_faults(), inputs[0],
-            self.layer_shape, self.layer_name
+            self._active_faults(), inputs[0], self.layer_name
         )
 
 
@@ -193,15 +203,19 @@ class DirectNeuronPerturbPreHook(DirectFaultHook):
             self,
             faults: list[sff.Fault],
             layer_name: str,
-            layer_shape: tuple[int, int, int]
+            position_ref: LayerPosition,
+            following_pos: int
     ) -> None:
         super().__init__(faults, layer_name)
-        self.layer_shape = layer_shape
+        self.position_ref = position_ref
+        self.following_pos = following_pos
 
     def __call__(self, _, inputs: tuple[Tensor, ...]) -> None:
+        if self.position_ref.p != self.following_pos:
+            return
+
         _perturb_neuron_spikes(
-            self._active_faults(), inputs[0],
-            self.layer_shape, self.layer_name
+            self._active_faults(), inputs[0], self.layer_name
         )
 
 

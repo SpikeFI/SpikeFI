@@ -89,6 +89,7 @@ class Campaign:
         )
 
         self.r_idx_ref = sfh.RoundIndex(0)
+        self.pos_ref = sfh.LayerPosition()
         self.duration = 0.  # duration of the evaluate loop only (excludes pre- and post-run methods)
         self.duration_wall = 0.  # sync-bracketed wall-clock time for the whole run()/run_train() call
         self.rounds: list[sff.FaultRound] = [sff.FaultRound()]
@@ -524,7 +525,9 @@ class Campaign:
         # Create faulty version of network
         self.faulty = deepcopy(self.golden)
         self.faulty.forward = MethodType(
-            Campaign._forward_opt_wrapper(self.layers_info, self.slayer),
+            Campaign._forward_opt_wrapper(
+                self.layers_info, self.slayer, self.pos_ref
+            ),
             self.faulty
         )
 
@@ -761,7 +764,7 @@ class Campaign:
                 if key not in self.dispatching_hooks:
                     pre_hook = sfh.DispatchingNeuronPerturbPreHook(
                         self.r_idx_ref, self.orounds, layer_name,
-                        layer_shape=self.layers_info.shapes_neu[layer_name]
+                        self.pos_ref, self.layers_info.index(layer_name) + 1
                     )
                     self.dispatching_hooks[key] = pre_hook
                     following_layer.register_forward_pre_hook(pre_hook)
@@ -798,7 +801,8 @@ class Campaign:
             faulty: nn.Module
     ) -> None:
         for layer_name, hook in Campaign._attach_direct_neuron_hooks(
-                faulty, round, self.layers_info, self.slayer, self.device
+                faulty, round, self.layers_info, self.slayer, self.device,
+                self.pos_ref
         ):
             self.direct_hooks[(r, layer_name, type(hook))] = hook
 
@@ -827,7 +831,8 @@ class Campaign:
             round: sff.FaultRound,
             layers_info: LayersInfo,
             slayer: spikeLayer,
-            device: torch.device
+            device: torch.device,
+            position_ref: sfh.LayerPosition
     ) -> list[tuple[str, 'sfh.DirectNeuronParametricHook | sfh.DirectNeuronPerturbPreHook']]:
         attached = []
         for layer_name in layers_info.get_injectables():
@@ -856,7 +861,7 @@ class Campaign:
             )
             perturb_hook = sfh.DirectNeuronPerturbPreHook(
                 neuron_faults, layer_name,
-                layer_shape=layers_info.shapes_neu[layer_name]
+                position_ref, layers_info.index(layer_name) + 1
             )
             following_layer.register_forward_pre_hook(perturb_hook)
             attached.append((layer_name, perturb_hook))
@@ -1241,16 +1246,20 @@ class Campaign:
         faulty = deepcopy(net).to(device)
         faulty.load_state_dict(state_dict)
 
+        position_ref = sfh.LayerPosition()
         if layers_info is not None and slayer is not None:
             if not hasattr(faulty, 'tail'):
                 setattr(faulty, 'tail', nn.Identity())
 
             faulty.forward = MethodType(
-                Campaign._forward_opt_wrapper(layers_info, slayer), faulty
+                Campaign._forward_opt_wrapper(layers_info, slayer, position_ref),
+                faulty
             )
 
         if round:
-            Campaign._attach_direct_neuron_hooks(faulty, round, layers_info, slayer, device)
+            Campaign._attach_direct_neuron_hooks(
+                faulty, round, layers_info, slayer, device, position_ref
+            )
 
         faulty.eval()
         return faulty
@@ -1275,7 +1284,8 @@ class Campaign:
     @staticmethod
     def _forward_opt_wrapper(
         layers_info: LayersInfo,
-        slayer: spikeLayer
+        slayer: spikeLayer,
+        position_ref: Optional[sfh.LayerPosition] = None
     ) -> Callable[[Tensor, Optional[int], Optional[int]], Tensor]:
         def forward_opt(
                 self: nn.Module,
@@ -1295,12 +1305,18 @@ class Campaign:
                 end_idx = len(layers_info) + end_idx
 
             subject_layers = [
-                lay_name for lay_idx, lay_name in enumerate(layers_info.order)
+                (lay_idx, lay_name)
+                for lay_idx, lay_name in enumerate(layers_info.order)
                 if start_idx <= lay_idx <= end_idx
             ]
 
             spikes = torch.clone(spikes_in)
-            for layer_name in subject_layers:
+            for lay_idx, layer_name in subject_layers:
+                # Published before the call so this layer's own pre-hooks
+                # can tell which invocation of it is running.
+                if position_ref is not None:
+                    position_ref.p = lay_idx
+
                 layer = getattr(self, layer_name)
                 spikes = layer(spikes)
 
@@ -1350,7 +1366,8 @@ class CampaignData:
     # a dictionary containing the Campaign Data object in Campaign.
     def restore(self) -> Campaign:
         campaign = Campaign(
-            self.golden, self.layers_info.shape_in, self.slayer, self.name
+            self.golden, self.layers_info.shape_in, self.slayer, self.name,
+            device=self.device
         )
         campaign.rounds = self.rounds
 
