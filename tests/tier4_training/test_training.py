@@ -21,7 +21,9 @@ from slayerSNN.slayer import spikeLayer
 import spikefi as sfi
 import spikefi.fault as sff
 import spikefi.hooks as sfh
-from spikefi.models import DeadNeuron, mul_value, PerturbedSynapse, StuckSynapse
+from spikefi.models import (
+    DeadNeuron, mul_value, PerturbedSynapse, StuckSynapse, ThresholdFaultNeuron
+)
 
 from nets import NetSpec
 from helpers import assert_active
@@ -433,6 +435,98 @@ def test_persistent_synapse_fault_survives_reload_with_no_campaign(
     assert torch.equal(loaded(x), expected_output)
 
 
+@pytest.mark.parametric
+@pytest.mark.training
+def test_parametric_neuron_fault_lets_gradient_reach_its_own_fan_in(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        net_params: dict,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        tiny_loaders: Callable[..., tuple[DataLoader, DataLoader]]
+) -> None:
+    """A parametric fault reaches the next layer by a different route than a
+    hard one: its own dummy spikeLayer computes the site's spike train from
+    the real synaptic input that produced it, rather than from a value that
+    ignores its input the way a hard OUTPUT fault's set_value() does -- so
+    unlike a hard fault, its site's own incoming row is not fan-in-frozen,
+    and training can adapt those weights in response to the perturbed
+    threshold. Checked as a differential: one optimizer step on the faulty
+    net must match, weight for weight, a hand-built equivalent that performs
+    the same two-hook choreography (stash the dummy layer's output at SF1,
+    inject it into SF2's input) without any of SpikeFI's own machinery."""
+    device = next(dense_net.net.parameters()).device
+    cmpn = make_campaign(dense_net.net, dense_net.shape_in, slayer)
+    train_loader, test_loader = tiny_loaders(dense_net.shape_in, batch_size=8)
+    x, y = next(iter(train_loader))
+
+    # A site that never fires leaves the dummy layer nothing to evaluate, so
+    # a genuinely active one is searched for rather than assumed.
+    golden_sf1 = cmpn.golden(x, 0, 0)
+    site = next(c for c in range(4) if golden_sf1[:, c, 0, 0, :].sum() > 0)
+    assert_active(golden_sf1, (slice(None), site, 0, 0, slice(None)))
+
+    model = ThresholdFaultNeuron(2.0)
+    perturbed_theta = model.param_method(cmpn.slayer.neuron['theta'], *model.param_args)
+    assert perturbed_theta != cmpn.slayer.neuron['theta'], (
+        'The perturbed threshold equals the original; the fault would be a no-op.'
+    )
+
+    w_before = dense_net.net.SF1.weight.detach().clone()
+    cmpn.inject(sff.Fault(model, sff.FaultSite('SF1', (site, 0, 0))), round_idx=0)
+
+    spike_loss = snn.loss(net_params).to(device)
+    faulties = cmpn.run_train(
+        1, train_loader, test_loader, spike_loss,
+        lambda params: torch.optim.SGD(params, lr=0.5), progress_mode='silent'
+    )
+
+    # An independently constructed dummy layer -- not the framework's own
+    # fault.model.flayer -- built the same way param_perturb() builds it,
+    # so the oracle does not simply read back what SpikeFI itself computed.
+    neuron = dict(cmpn.slayer.neuron)
+    neuron['theta'] = perturbed_theta
+    flayer = spikeLayer(neuron, cmpn.slayer.simulation).to(device)
+
+    hand_net = deepcopy(dense_net.net)
+    # A tensor index for the channel, mirroring Fault.unroll(), so the
+    # channel dimension is kept (size 1) by advanced indexing rather than
+    # collapsed the way a plain int index would -- matching the 3D
+    # (batch, site, time) shape the dummy layer's psp/spike expect.
+    idx = (slice(None), torch.tensor([site]), 0, 0, slice(None))
+    stash: dict[str, Tensor] = {}
+
+    def _stash_faulty_spikes(_: nn.Module, __: tuple, output: Tensor) -> None:
+        val_site = output[idx]
+        b, s, d = val_site.shape
+        stash['v'] = flayer.spike(flayer.psp(val_site.reshape(b, s, 1, 1, d))).reshape(b, s, d)
+
+    def _inject_faulty_spikes(_: nn.Module, inputs: tuple[Tensor, ...]) -> None:
+        inputs[0][idx] = stash.pop('v')
+
+    handle_1 = hand_net.SF1.register_forward_hook(_stash_faulty_spikes)
+    handle_2 = hand_net.SF2.register_forward_pre_hook(_inject_faulty_spikes)
+
+    optimizer = torch.optim.SGD(hand_net.parameters(), lr=0.5)
+    output = hand_net(x)
+    one_hot = torch.zeros_like(output[..., :1]).scatter_(1, y.view(-1, 1, 1, 1, 1), 1.0)
+    optimizer.zero_grad()
+    spike_loss.numSpikes(output, one_hot).backward()
+    optimizer.step()
+    handle_1.remove()
+    handle_2.remove()
+
+    # The differential above only proves the two nets agree with each
+    # other; on its own it would pass just as well if both had frozen the
+    # faulty row identically. This asserts the row the differential is
+    # actually about did move, ruling that out.
+    assert not torch.equal(faulties[0].SF1.weight[site], w_before[site]), (
+        "The faulty site's own row did not move; gradient did not reach its fan-in."
+    )
+
+    assert torch.allclose(faulties[0].SF1.weight, hand_net.SF1.weight, atol=1e-6)
+    assert torch.allclose(faulties[0].SF2.weight, hand_net.SF2.weight, atol=1e-6)
+
+
 @pytest.mark.neuron
 @pytest.mark.training
 def test_neuron_fault_participates_in_the_backward_pass(
@@ -497,3 +591,75 @@ def test_neuron_fault_participates_in_the_backward_pass(
 
     assert torch.allclose(faulties[0].SF1.weight, hand_net.SF1.weight, atol=1e-6)
     assert torch.allclose(faulties[0].SF2.weight, hand_net.SF2.weight, atol=1e-6)
+
+
+@pytest.mark.neuron
+@pytest.mark.training
+def test_training_isolates_faults_on_layers_sharing_a_following_module(
+        same_shape_shared_net: NetSpec,
+        slayer: spikeLayer,
+        net_params: dict,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        tiny_loaders: Callable[..., tuple[DataLoader, DataLoader]]
+) -> None:
+    """SF1 and SF2 feed the same shared dropout module and have equal
+    output shape, so a fault on one cannot be told apart from the other by
+    the shape of what the shared module receives -- the DirectFaultHook
+    path (run_train's own) has to identify its layer's own invocation the
+    same way the dispatching path does. Round 0 faults SF1, round 1 faults
+    SF2: each trained net's own row must be the only one frozen, and the
+    other layer must train exactly as if no fault were present."""
+    # Later layers' own thresholds are rarely crossed by this tiny net's
+    # default-initialized weights, so every layer is amplified for a
+    # genuinely non-degenerate (not all-zero) output to compare between the
+    # two nets.
+    with torch.no_grad():
+        same_shape_shared_net.net.SF2.weight.mul_(20)
+        same_shape_shared_net.net.SF3.weight.mul_(20)
+
+    device = next(same_shape_shared_net.net.parameters()).device
+    cmpn = make_campaign(same_shape_shared_net.net, same_shape_shared_net.shape_in, slayer)
+    train_loader, test_loader = tiny_loaders(same_shape_shared_net.shape_in, batch_size=8)
+    x, _ = next(iter(train_loader))
+
+    golden_sf1 = cmpn.golden(x, 0, 0)
+    site = next(c for c in range(4) if golden_sf1[:, c, 0, 0, :].sum() > 0)
+    assert_active(golden_sf1, (slice(None), site, 0, 0, slice(None)))
+
+    cmpn.inject(sff.Fault(DeadNeuron(), sff.FaultSite('SF1', (site, 0, 0))), round_idx=0)
+    cmpn.then_inject(sff.Fault(DeadNeuron(), sff.FaultSite('SF2', (site, 0, 0))))
+
+    w1_before = same_shape_shared_net.net.SF1.weight.detach().clone()
+    w2_before = same_shape_shared_net.net.SF2.weight.detach().clone()
+
+    spike_loss = snn.loss(net_params).to(device)
+    faulties = cmpn.run_train(
+        1, train_loader, test_loader, spike_loss,
+        lambda params: torch.optim.SGD(params, lr=0.1), progress_mode='silent'
+    )
+    del cmpn
+
+    moved_sf1_r0 = [not torch.equal(faulties[0].SF1.weight[c], w1_before[c]) for c in range(4)]
+    moved_sf2_r0 = [not torch.equal(faulties[0].SF2.weight[c], w2_before[c]) for c in range(4)]
+    moved_sf1_r1 = [not torch.equal(faulties[1].SF1.weight[c], w1_before[c]) for c in range(4)]
+    moved_sf2_r1 = [not torch.equal(faulties[1].SF2.weight[c], w2_before[c]) for c in range(4)]
+
+    # Round 0 faults SF1: only SF1's own row is frozen. If the fault instead
+    # leaked onto SF2's own invocation of the shared module, the site's row
+    # of SF2 would be frozen too, since a wrongly re-triggered pre-hook
+    # would zero that row's incoming spikes on every step.
+    assert moved_sf1_r0 == [c != site for c in range(4)]
+    assert all(moved_sf2_r0)
+    # Round 1 faults SF2: only SF2's own row is frozen, SF1 unaffected.
+    assert all(moved_sf1_r1)
+    assert moved_sf2_r1 == [c != site for c in range(4)]
+
+    # The two trained nets, run independently with no live Campaign, carry
+    # their own distinct fault rather than having converged to the same
+    # (or golden) behaviour.
+    out_a = faulties[0](x)
+    out_b = faulties[1](x)
+    assert not torch.equal(out_a, out_b), (
+        'The two rounds fault different layers; identical output would mean '
+        'the two returned nets are not actually independent.'
+    )

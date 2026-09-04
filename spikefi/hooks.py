@@ -88,7 +88,12 @@ def _stash_parametric_spikes(
 
         flayer = fault.model.flayer
         fspike_out = flayer.spike(flayer.psp(val_site.reshape(b, s, 1, 1, d)))
-        fault.model.store(fspike_out.reshape(b, s, d))
+        # Left attached: the following layer's pre-hook writes this value
+        # straight into its input, so gradient can reach the real synaptic
+        # weights that produced val_site during training. Different than
+        # a hard neuron fault, whose set_value() ignores its input and is
+        # fan-in-frozen by construction.
+        fault.model.store(fspike_out.reshape(b, s, d), detach=False)
 
 
 # Base for all layer-scoped fault hook classes, declaring what they share:

@@ -235,10 +235,13 @@ class FaultModel:
 
         return original
 
-    def store(self, perturbed: float | Tensor) -> None:
-        # Detach first: never cache a non-leaf tensor.
+    def store(self, perturbed: float | Tensor, detach: bool = True) -> None:
+        # Detached by default, so an arbitrary cached value never
+        # accidentally carries a live computation graph.
         self.perturbed = (
-            perturbed.detach() if isinstance(perturbed, Tensor) else perturbed
+            perturbed.detach()
+            if detach and isinstance(perturbed, Tensor)
+            else perturbed
         )
 
     def unstore(self) -> float | Tensor:
