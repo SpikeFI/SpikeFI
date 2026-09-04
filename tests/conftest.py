@@ -19,7 +19,10 @@ from slayerSNN.slayer import spikeLayer
 import spikefi as sfi
 import spikefi.utils.io as sfio
 
-from nets import NetSpec
+from nets import (
+    ConvNet, DenseNet, NetSpec, SameShapeSharedNet, SharedDropoutNet,
+    ThreeLayerNet
+)
 
 
 # --- Tier/gpu auto-marking ---
@@ -41,24 +44,29 @@ def pytest_collection_modifyitems(
         config: pytest.Config,
         items: list[pytest.Item]
 ) -> None:
-    """Derives each test's tier marker from its directory and applies the
-    gpu marker (skipped when CUDA is unavailable) to everything outside
-    tier0_units/, so no individual test file needs its own pytestmark line."""
+    """Derives each test's tier marker from its directory, applies the gpu
+    marker to every tier but tier0_units/, and skips whatever carries that
+    marker when CUDA is unavailable, so no individual test file needs its
+    own pytestmark line."""
     tests_dir = Path(__file__).resolve().parent
     cuda_available = torch.cuda.is_available()
     skip_gpu = pytest.mark.skip(reason='requires CUDA, not available')
 
     for item in items:
+        # A tier-agnostic test sitting directly under tests/ matches no
+        # tier and is left to declare gpu for itself where it needs one.
         rel_dir = item.path.resolve().relative_to(tests_dir).parts[0]
 
         tier_marker = _TIER_DIRS.get(rel_dir)
         if tier_marker is not None:
             item.add_marker(getattr(pytest.mark, tier_marker))
+            if rel_dir != 'tier0_units':
+                item.add_marker(pytest.mark.gpu)
 
-        if rel_dir != 'tier0_units':
-            item.add_marker(pytest.mark.gpu)
-            if not cuda_available:
-                item.add_marker(skip_gpu)
+        # Covers both the marker applied just above and one a tier-agnostic
+        # test declared itself.
+        if not cuda_available and item.get_closest_marker('gpu') is not None:
+            item.add_marker(skip_gpu)
 
 
 # --- Output artifacts ---
@@ -136,133 +144,37 @@ def slayer(net_params: dict, device: torch.device) -> spikeLayer:
     return spikeLayer(net_params['neuron'], net_params['simulation']).to(device)
 
 
-# --- Tiny synthetic nets ---
-
-class _DenseNet(nn.Module):
-    """Two chained dense layers: the minimal injectable-injectable topology."""
-
-    def __init__(self, slayer: spikeLayer) -> None:
-        super().__init__()
-        self.slayer: spikeLayer = slayer
-        self.SF1: nn.Module = slayer.dense(8, 4)
-        self.SF2: nn.Module = slayer.dense(4, 3)
-
-    def forward(self, spikes_in: Tensor) -> Tensor:
-        s = self.slayer.spike(self.slayer.psp(self.SF1(spikes_in)))
-        return self.slayer.spike(self.slayer.psp(self.SF2(s)))
-
-
-class _ThreeLayerNet(nn.Module):
-    """Three chained dense layers: the shortest topology in which a round can
-    fault two different layers and still leave the two fault-free trailing
-    layers early stop needs, so the early-stop layer and the late-start layer
-    are distinct rather than collapsing onto the same one."""
-
-    def __init__(self, slayer: spikeLayer) -> None:
-        super().__init__()
-        self.slayer: spikeLayer = slayer
-        self.SF1: nn.Module = slayer.dense(8, 6)
-        self.SF2: nn.Module = slayer.dense(6, 4)
-        self.SF3: nn.Module = slayer.dense(4, 3)
-
-    def forward(self, spikes_in: Tensor) -> Tensor:
-        s = self.slayer.spike(self.slayer.psp(self.SF1(spikes_in)))
-        s = self.slayer.spike(self.slayer.psp(self.SF2(s)))
-        return self.slayer.spike(self.slayer.psp(self.SF3(s)))
-
-
-class _ConvNet(nn.Module):
-    """conv -> pool -> dense: conv/dense weight-index-order asymmetry, and a
-    non-injectable layer (the pool) sitting between two injectables."""
-
-    def __init__(self, slayer: spikeLayer) -> None:
-        super().__init__()
-        self.slayer: spikeLayer = slayer
-        self.SC1: nn.Module = slayer.conv(1, 2, 3, padding=1)
-        self.SP1: nn.Module = slayer.pool(2)
-        # dense()'s tuple inFeatures is (W, H, C), the reverse of a tensor's
-        # own (C, H, W) shape (e.g. LayersInfo.shapes_neu) - SP1 outputs
-        # (C=2, H=3, W=3), so this reverses it to (3, 3, 2).
-        self.SF2: nn.Module = slayer.dense((3, 3, 2), 4)
-
-    def forward(self, spikes_in: Tensor) -> Tensor:
-        s1 = self.slayer.spike(self.slayer.psp(self.SC1(spikes_in)))
-        p1 = self.slayer.spike(self.slayer.psp(self.SP1(s1)))
-        return self.slayer.spike(self.slayer.psp(self.SF2(p1)))
-
-
-class _SharedDropoutNet(nn.Module):
-    """Two injectables of *different* output shape feeding the same shared
-    dropout module, for the neuron perturb pre-hook's layer_shape guard."""
-
-    def __init__(self, slayer: spikeLayer) -> None:
-        super().__init__()
-        self.slayer: spikeLayer = slayer
-        self.SF1: nn.Module = slayer.dense(8, 4)
-        self.SF2: nn.Module = slayer.dense(4, 6)
-        self.drop: nn.Module = slayer.dropout(0.0)
-        self.SF3: nn.Module = slayer.dense(6, 3)
-
-    def forward(self, spikes_in: Tensor) -> Tensor:
-        s1 = self.slayer.spike(self.slayer.psp(self.SF1(spikes_in)))
-        d1 = self.drop(s1)
-        s2 = self.slayer.spike(self.slayer.psp(self.SF2(d1)))
-        d2 = self.drop(s2)
-        return self.slayer.spike(self.slayer.psp(self.SF3(d2)))
-
-
-class _SameShapeSharedNet(nn.Module):
-    """Two injectables of *equal* output shape sharing a dropout module: the
-    layer_shape guard is shape-only, so cross-contamination would appear
-    here if the guard were relied on to fully disambiguate the two."""
-
-    def __init__(self, slayer: spikeLayer) -> None:
-        super().__init__()
-        self.slayer: spikeLayer = slayer
-        self.SF1: nn.Module = slayer.dense(8, 4)
-        self.SF2: nn.Module = slayer.dense(4, 4)
-        self.drop: nn.Module = slayer.dropout(0.0)
-        self.SF3: nn.Module = slayer.dense(4, 3)
-
-    def forward(self, spikes_in: Tensor) -> Tensor:
-        s1 = self.slayer.spike(self.slayer.psp(self.SF1(spikes_in)))
-        d1 = self.drop(s1)
-        s2 = self.slayer.spike(self.slayer.psp(self.SF2(d1)))
-        d2 = self.drop(s2)
-        return self.slayer.spike(self.slayer.psp(self.SF3(d2)))
-
-
 # Each net fixture seeds the global torch RNG explicitly right
 # before construction to favor reproducibility and ensure that
 # weight values do not differ from run to run.
 @pytest.fixture
 def dense_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(100)
-    return NetSpec(net=_DenseNet(slayer).to(device), shape_in=(8, 1, 1))
+    return NetSpec(net=DenseNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture
 def three_layer_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(104)
-    return NetSpec(net=_ThreeLayerNet(slayer).to(device), shape_in=(8, 1, 1))
+    return NetSpec(net=ThreeLayerNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture
 def conv_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(101)
-    return NetSpec(net=_ConvNet(slayer).to(device), shape_in=(1, 6, 6))
+    return NetSpec(net=ConvNet(slayer).to(device), shape_in=(1, 6, 6))
 
 
 @pytest.fixture
 def shared_dropout_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(102)
-    return NetSpec(net=_SharedDropoutNet(slayer).to(device), shape_in=(8, 1, 1))
+    return NetSpec(net=SharedDropoutNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 @pytest.fixture
 def same_shape_shared_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(103)
-    return NetSpec(net=_SameShapeSharedNet(slayer).to(device), shape_in=(8, 1, 1))
+    return NetSpec(net=SameShapeSharedNet(slayer).to(device), shape_in=(8, 1, 1))
 
 
 # --- Seeded inputs & datasets ---
