@@ -1,4 +1,4 @@
-"""Tier 0 — exact known-answer tests for spikefi.models' value functions:
+"""Tier 0 — exact known-answer tests for spikefi.models' fault functions:
 set_value/add_value/mul_value/qua_value/bfl_value.
 """
 
