@@ -42,7 +42,7 @@ def qargs_exact(
     assert xmin != xmax, "Min and max values cannot be equal"
 
     scale = (xmax - xmin) / (qmax - qmin)
-    zero_point = int(clip(qmin - xmin / scale, qmin, qmax))
+    zero_point = int(clip(round(qmin - xmin / scale), qmin, qmax))
 
     return scale, zero_point
 

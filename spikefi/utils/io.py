@@ -29,9 +29,10 @@ NET_DIR = os.path.join(OUT_DIR, 'net')
 
 def make_filepath(
         fname: str,
-        parentdir: str = OUT_DIR,
+        parentdir: str | None = None,
         rename: bool = False
 ) -> str:
+    parentdir = parentdir or OUT_DIR
     os.makedirs(parentdir, exist_ok=True)
 
     return os.path.join(
@@ -61,17 +62,19 @@ def calculate_trial(fname: str, parentdir: str = OUT_DIR) -> int:
         return 0
 
     fname, extension = os.path.splitext(fname)
-    fnames = [f.removesuffix(extension) for f in os.listdir(parentdir)
-              if fname in f and f.endswith(extension)]
+    # A file collides only if its name is exactly fname, optionally
+    # followed by a ' (N)' trial marker.
+    trial_re = re.compile(rf"^{re.escape(fname)}(?: \((\d+)\))?$")
 
-    if not fnames:
-        return 0
+    trials = []
+    for f in os.listdir(parentdir):
+        if not f.endswith(extension):
+            continue
+        match = trial_re.match(f.removesuffix(extension))
+        if match:
+            trials.append(int(match.group(1) or 0))
 
-    trial_matches = [re.search(r' \(\d+\)$', f) for f in fnames]
-
-    return max(
-        [int(m.group().strip(' ()')) if m else 0 for m in trial_matches]
-    ) + 1
+    return max(trials) + 1 if trials else 0
 
 
 def rename_if_multiple(fname: str, parentdir: str = OUT_DIR) -> str:

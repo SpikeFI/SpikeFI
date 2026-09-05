@@ -17,9 +17,10 @@
 
 from collections.abc import Callable
 from math import prod
-import random
 from typing import Any
+
 from torch import nn, Tensor
+
 from slayerSNN import slayer
 
 
@@ -38,15 +39,14 @@ class LayersInfo:
         self.shapes_syn: dict[str, tuple[int, int, int, int]] = {}
 
     def __eq__(self, other: object) -> bool:
-        isEq = isinstance(other, LayersInfo)
-
-        isEq &= self.shape_in == other.shape_in
-        isEq &= self.order == other.order
-        isEq &= self.types == other.types
-        isEq &= self.shapes_neu == other.shapes_neu
-        isEq &= self.shapes_syn == other.shapes_syn
-
-        return isEq
+        return (
+            isinstance(other, LayersInfo)
+            and self.shape_in == other.shape_in
+            and self.order == other.order
+            and self.types == other.types
+            and self.shapes_neu == other.shapes_neu
+            and self.shapes_syn == other.shapes_syn
+        )
 
     def __len__(self) -> int:
         return len(self.order)
@@ -77,12 +77,6 @@ class LayersInfo:
         s += '}'
 
         return s
-
-    def identify(self, shape: tuple[int, int, int]) -> str | None:
-        for n, s in self.shapes_neu.items():
-            if s == shape:
-                return n
-        return None
 
     def infer(self, name: str, layer: nn.Module, output: Tensor) -> None:
         if not LayersInfo.is_module_supported(layer):
@@ -121,12 +115,6 @@ class LayersInfo:
     def get_following(self, injectable_name: str) -> str | None:
         idx = self.index(injectable_name)
         return self.order[idx + 1] if idx < len(self) - 1 else None
-
-    def get_random_inj(self, syn_select: bool) -> str:
-        return random.choices(
-            self.get_injectables(),
-            weights=self.get_sizes_inj(syn_select), k=1
-        )[0]
 
     def get_shape(self, syn_select: bool, name: str) -> tuple[int, ...]:
         return self.shapes_syn[name] if syn_select else self.shapes_neu[name]
