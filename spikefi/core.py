@@ -69,11 +69,12 @@ class Campaign:
             device: torch.device | None = None,
     ) -> None:
         self.name = name
-        self.slayer = deepcopy(slayer)
         self.faulty = None
         self.device = device or torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu'
         )
+
+        self.slayer = deepcopy(slayer).to(self.device)
 
         self.golden = deepcopy(net).to(self.device)
         setattr(self.golden, 'tail', torch.nn.Identity())
@@ -1343,7 +1344,7 @@ class CampaignData:
         self.name = campaign.name
 
         self.golden = deepcopy(campaign.golden).to('cpu')
-        self.slayer = deepcopy(campaign.slayer)
+        self.slayer = deepcopy(campaign.slayer).to('cpu')
         self.device = campaign.device  # torch.device is immutable
 
         self.layers_info = deepcopy(campaign.layers_info)
@@ -1354,22 +1355,74 @@ class CampaignData:
         )
 
         self.duration = campaign.duration
+        self.rgroups = deepcopy(campaign.rgroups)
+        self.performance = deepcopy(campaign.performance)
+
         # Copy rounds/orounds in one deepcopy call so exported data keeps their
         # live Fault-object sharing (optimized() shallow-copies Faults in)
         self.rounds, self.orounds = deepcopy((campaign.rounds, campaign.orounds))
-        self.rgroups = deepcopy(campaign.rgroups)
-        self.performance = deepcopy(campaign.performance)
+
+        # Move args/param_args Tensors to CPU, for data to be loadable on
+        # any machine and delete cached objects that are created fresh with
+        # each campaign run (e.g., original/perturbed).
+        for round in self.rounds:
+            for fault in round.get_faults():
+                model = fault.model
+                model.original = None
+                model.perturbed = None
+                model.args = tuple(
+                    arg.to('cpu') if isinstance(arg, Tensor) else arg
+                    for arg in model.args
+                )
+
+                if hasattr(model, 'flayer'):
+                    model.flayer = None
+                    model.param_original = None
+                    model.param_perturbed = None
+                    model.param_args = tuple(
+                        arg.to('cpu') if isinstance(arg, Tensor) else arg
+                        for arg in model.param_args
+                    )
 
     # Restoring a Campaign from its Campaign Data relies on reconstructing
     # the Campaign object (i.e., calling Campaign.__init__()), which is
     # not directly applicable in the case of using __get/setstate__ with
     # a dictionary containing the Campaign Data object in Campaign.
     def restore(self) -> Campaign:
+        # The captured device may no longer exist on the restoring machine
+        device_available = (
+            self.device.type != 'cuda'
+            or (
+                torch.cuda.is_available()
+                and (
+                    self.device.index is None
+                    or self.device.index < torch.cuda.device_count()
+                )
+            )
+        )
+        device = self.device if device_available else None
+
         campaign = Campaign(
             self.golden, self.layers_info.shape_in, self.slayer, self.name,
-            device=self.device
+            device=device
         )
         campaign.rounds = self.rounds
+
+        # args/param_args were normalized to CPU for export, so they are
+        # placed to the restoring device of the recreated Campaign object
+        for round in self.rounds:
+            for fault in round.get_faults():
+                model = fault.model
+                model.args = tuple(
+                    arg.to(campaign.device) if isinstance(arg, Tensor) else arg
+                    for arg in model.args
+                )
+
+                if hasattr(model, 'flayer'):
+                    model.param_args = tuple(
+                        arg.to(campaign.device) if isinstance(arg, Tensor) else arg
+                        for arg in model.param_args
+                    )
 
         return campaign
 

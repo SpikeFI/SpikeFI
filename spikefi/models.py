@@ -294,6 +294,10 @@ class SaturatedSynapse(FaultModel):
         # Q3 = torch.quantile(weight_matrix, 0.75)
         Q1 = torch.as_tensor(Q1, dtype=torch.float32)
         Q3 = torch.as_tensor(Q3, dtype=torch.float32)
+        assert Q1.numel() == 1 and Q3.numel() == 1, (
+            'Q1 and Q3 must each reduce to a single scalar value, e.g. via '
+            'torch.quantile(weight_matrix, ...) with no dim argument.'
+        )
 
         IQR = Q3 - Q1
         i = 3.0 if intensity == 'extreme' else 1.5
