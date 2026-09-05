@@ -66,12 +66,14 @@ class Campaign:
             shape_in: tuple[int, int, int],
             slayer: spikeLayer,
             name: str = 'sfi-campaign',
-            device: torch.device | None = None,
+            device: torch.device = torch.device('cuda'),
     ) -> None:
         self.name = name
         self.faulty = None
-        self.device = device or torch.device(
-            'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = device
+        assert self.device.type == 'cuda' and torch.cuda.is_available(), (
+            'SpikeFI requires a CUDA device: SLAYER\'s spike/psp '
+            'kernels have no CPU implementation.'
         )
 
         self.slayer = deepcopy(slayer).to(self.device)
@@ -1400,7 +1402,7 @@ class CampaignData:
                 )
             )
         )
-        device = self.device if device_available else None
+        device = self.device if device_available else torch.device('cuda')
 
         campaign = Campaign(
             self.golden, self.layers_info.shape_in, self.slayer, self.name,
