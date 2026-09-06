@@ -1,5 +1,6 @@
 import csv
 from dataclasses import dataclass, fields as dataclass_fields, MISSING
+import os
 
 import pandas as pd
 
@@ -115,6 +116,31 @@ REQUIRED_FIELDS: dict[tuple[str, ...], tuple[str, ...]] = {
 }
 
 
+def _drop_partial_last_row(path: str, fields: tuple[str, ...]) -> None:
+    """
+    Truncates path back to the end of its last complete row when the final
+    line does not carry one field per column, as a process killed mid-write
+    would leave behind, and ensures the file ends with a newline so a
+    subsequent append starts on its own line.
+    """
+
+    with open(path, newline='') as f:
+        lines = f.readlines()
+
+    if not lines:
+        return
+
+    last_row = next(csv.reader([lines[-1]]))
+    if len(last_row) != len(fields):
+        lines = lines[:-1]
+
+    if lines and not lines[-1].endswith('\n'):
+        lines[-1] += '\n'
+
+    with open(path, 'w', newline='') as f:
+        f.writelines(lines)
+
+
 class RecordWriter:
     """
     Writes TrialRecord/RoundRecord rows to a CSV opened against an explicit
@@ -122,15 +148,34 @@ class RecordWriter:
     open and every row is flushed immediately: a run interrupted mid-way
     still leaves every completed trial on disk, unlike buffering all rows
     in memory and deriving fieldnames from the first one at the very end.
+
+    With append=True against an existing, non-empty file, the file's header
+    is validated to match fields, any partial final row left by a process
+    killed mid-write is dropped, and writing resumes without repeating the
+    header. append=True against a missing or empty file behaves exactly
+    like append=False.
     """
 
-    def __init__(self, path: str, fields: tuple[str, ...]) -> None:
+    def __init__(self, path: str, fields: tuple[str, ...], append: bool = False) -> None:
         self.path: str = path
         self.fields: tuple[str, ...] = tuple(fields)
 
-        self._file = open(path, 'w', newline='')
+        do_append = append and os.path.exists(path) and os.path.getsize(path) > 0
+        if do_append:
+            with open(path, newline='') as f:
+                header = next(csv.reader(f), [])
+            if tuple(header) != self.fields:
+                raise ValueError(
+                    f"Cannot append to {path!r}: existing header {header} does not "
+                    f"match expected fields {list(self.fields)}."
+                )
+
+            _drop_partial_last_row(path, self.fields)
+
+        self._file = open(path, 'a' if do_append else 'w', newline='')
         self._writer = csv.DictWriter(self._file, fieldnames=list(self.fields))
-        self._writer.writeheader()
+        if not do_append:
+            self._writer.writeheader()
         self._file.flush()
 
     def write(self, record: 'TrialRecord | RoundRecord | dict[str, object]') -> None:
