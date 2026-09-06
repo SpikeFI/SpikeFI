@@ -162,7 +162,7 @@ def three_layer_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
 @pytest.fixture
 def conv_net(slayer: spikeLayer, device: torch.device) -> NetSpec:
     torch.manual_seed(101)
-    return NetSpec(net=ConvNet(slayer).to(device), shape_in=(1, 6, 6))
+    return NetSpec(net=ConvNet(slayer).to(device), shape_in=(1, 6, 10))
 
 
 @pytest.fixture

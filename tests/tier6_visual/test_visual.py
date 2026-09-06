@@ -272,7 +272,8 @@ def test_heat_uses_documented_shape_for_a_complete_single_layer_neuron_sweep(
     """When a layer's fault count N equals prod(its neuron shape) -- a
     complete single-layer sweep -- heat() with preserve_dim=True must use
     the documented (H*W, C) plot shape, not the generic _heat_reshape
-    fallback; the two diverge here since conv gives H*W != 1."""
+    fallback. The net's neuron shape (C=2, H=4, W=8) has three distinct
+    dimensions, so the assertion below also pins the H/W axis order."""
     cmpn = make_campaign(conv_net.net, conv_net.shape_in, slayer)
     cmpn.inject_complete(DeadNeuron(), layer_names='SC1')
     _, test_loader = tiny_loaders(conv_net.shape_in)
@@ -288,6 +289,9 @@ def test_heat_uses_documented_shape_for_a_complete_single_layer_neuron_sweep(
 
     figs = sfv.heat(data, layer='SC1', fault_model=DeadNeuron(), preserve_dim=True, to_save=False)
     assert figs, 'heat() produced no figures; not a real check.'
+
+    plotted_shape = figs[0].axes[0].images[0].get_array().shape
+    assert plotted_shape == (shape[1] * shape[2], shape[0])
 
     expected_plot_shape = (shape[1] * shape[2], shape[0])
     actual_plot_shape = figs[0].axes[0].images[0].get_array().shape

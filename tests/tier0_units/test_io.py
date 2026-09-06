@@ -50,9 +50,11 @@ def test_calculate_trial_continues_past_the_highest_existing_trial(
 def test_calculate_trial_ignores_a_same_stem_file_with_another_extension(
         tmp_path: Path
 ) -> None:
-    """A file sharing the stem but not the extension is not a collision."""
+    """A file sharing the stem but not the extension is not a collision.
+    The fixture is extensionless: removesuffix(extension) is a no-op on it,
+    so its bare name would otherwise still match the trial regex."""
     d = str(tmp_path)
-    (tmp_path / 'a.pt').touch()
+    (tmp_path / 'a').touch()
 
     assert sfio.calculate_trial('a.pkl', d) == 0
 

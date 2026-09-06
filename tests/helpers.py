@@ -5,8 +5,6 @@ helpers for Tiers 1-3.
 """
 
 
-from collections.abc import Generator
-from contextlib import contextmanager
 from typing import Any
 
 import torch
@@ -77,53 +75,8 @@ def hand_mutate_weight(
     return original
 
 
-@contextmanager
-def hand_mutate_neuron_output(
-        module: nn.Module,
-        index: tuple,
-        value: float | Tensor
-) -> Generator[None]:
-    """Registers a raw forward hook that overwrites a neuron output site,
-    bypassing SpikeFI's hook classes entirely, for the same differential
-    comparison as hand_mutate_weight but on the OUTPUT target. The
-    overwrite is active only for the duration of the `with` block."""
-    def _hook(_: nn.Module, __: tuple, output: Tensor) -> None:
-        output[index] = value
-
-    handle = module.register_forward_hook(_hook)
-    try:
-        yield
-    finally:
-        handle.remove()
-
-
 # --- Layer/work probes (Tier 3: an optimization must actually skip work,
 # not merely produce the right answer) ---
-
-@contextmanager
-def count_invocations(
-        net: nn.Module,
-        layer_names: list[str]
-) -> Generator[dict[str, int]]:
-    """Counts how many times each named layer is actually invoked during
-    whatever forward passes run inside the `with` block, so a claimed
-    optimization (e.g. late start skipping early layers) can be checked
-    directly rather than inferred from the output alone."""
-    counts: dict[str, int] = {name: 0 for name in layer_names}
-    handles = []
-
-    for name in layer_names:
-        def _hook(_: nn.Module, __: tuple, ___: Tensor, name: str = name) -> None:
-            counts[name] += 1
-
-        handles.append(getattr(net, name).register_forward_hook(_hook))
-
-    try:
-        yield counts
-    finally:
-        for handle in handles:
-            handle.remove()
-
 
 def capture_invocation_widths(
         campaign: sfi.Campaign,
@@ -131,10 +84,10 @@ def capture_invocation_widths(
         test_loader: DataLoader,
         **run_kwargs: Any
 ) -> dict[str, list[int]]:
-    """Like count_invocations, but for a full campaign.run() call, and
-    recording the batch width of each invocation rather than only how many
-    there were: an optimization that drops samples from a forward pass is
-    told apart from one that keeps them by how wide the call is, not by how
+    """Hooks each named layer for a full campaign.run() call and records
+    the batch width of each invocation rather than only how many there
+    were: an optimization that drops samples from a forward pass is told
+    apart from one that keeps them by how wide the call is, not by how
     often it happens. campaign.faulty only exists once run()'s own _pre_run()
     has built it, so the hooks are attached by wrapping _pre_run itself,
     right after it returns, rather than by hooking a net that does not yet

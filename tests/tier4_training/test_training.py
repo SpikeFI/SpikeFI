@@ -663,3 +663,77 @@ def test_training_isolates_faults_on_layers_sharing_a_following_module(
         'The two rounds fault different layers; identical output would mean '
         'the two returned nets are not actually independent.'
     )
+
+
+@pytest.mark.training
+def test_run_train_keeps_a_best_epoch_not_the_last_one(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        net_params: dict,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        tiny_loaders: Callable[..., tuple[DataLoader, DataLoader]]
+) -> None:
+    """_evaluate_train saves faulty's weights as best_state_dict whenever
+    the current epoch's test accuracy ties or beats every epoch before it,
+    and restores that checkpoint once training ends. Two epochs are forced
+    to tie for the best accuracy, since the guarantee under test is only
+    that a best epoch is kept. The test loader is forced to a single batch,
+    so accuracyLog gets exactly one forced value per epoch, and each epoch's
+    actual trained weights are captured independently (right when
+    learningStat.update() fires, mirroring the moment _evaluate_train itself
+    reads accuracyLog) so the check is against the real weights at that point."""
+    cmpn = make_campaign(dense_net.net, dense_net.shape_in, slayer)
+    train_loader, test_loader = tiny_loaders(dense_net.shape_in, n_samples=4, batch_size=4)
+
+    forced_accuracies = [0.5, 0.9, 0.9, 0.3]
+    best_epochs = [1, 2]
+    epoch_snapshots: list[dict] = []
+
+    real_pre_run_train = cmpn._pre_run_train
+
+    def _pre_run_train_and_spy() -> list[nn.Module]:
+        faulties = real_pre_run_train()
+        stat = cmpn.performance[0].testing
+        acc_iter = iter(forced_accuracies)
+        stat.accuracy = lambda: next(acc_iter)
+
+        real_update = stat.update
+
+        def _update_and_snapshot() -> None:
+            real_update()
+            epoch_snapshots.append(deepcopy(faulties[0].state_dict()))
+
+        stat.update = _update_and_snapshot
+        return faulties
+
+    cmpn._pre_run_train = _pre_run_train_and_spy
+
+    spike_loss = snn.loss(net_params).to(next(dense_net.net.parameters()).device)
+    faulties = cmpn.run_train(
+        len(forced_accuracies), train_loader, test_loader, spike_loss,
+        lambda params: torch.optim.Adam(params, lr=1e-2), progress_mode='silent'
+    )
+
+    assert len(epoch_snapshots) == len(forced_accuracies)
+    weight_keys = ['SF1.weight', 'SF2.weight']
+    for k in weight_keys:
+        for e in best_epochs:
+            assert not torch.equal(epoch_snapshots[e][k], epoch_snapshots[-1][k]), (
+                f'Epoch {e} (a best epoch) and the last epoch have '
+                'bit-identical weights; the check below could not tell '
+                '"kept a best" from "kept whatever training ended on" '
+                'regardless of which _evaluate_train actually does.'
+            )
+
+    final_state = faulties[0].state_dict()
+    for k in weight_keys:
+        matches_a_best = any(
+            torch.equal(final_state[k], epoch_snapshots[e][k]) for e in best_epochs
+        )
+        assert matches_a_best, (
+            f"Final weight '{k}' matches neither of the two epochs tied for "
+            f'the best forced accuracy ({forced_accuracies[best_epochs[0]]}, '
+            f'epochs {best_epochs}) -- training continued to epoch '
+            f"{len(forced_accuracies) - 1} at a lower accuracy, so this is "
+            "not simply the last epoch's weights either."
+        )

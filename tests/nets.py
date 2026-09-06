@@ -49,7 +49,8 @@ class ThreeLayerNet(nn.Module):
 
 class ConvNet(nn.Module):
     """conv -> pool -> dense: conv/dense weight-index-order asymmetry, and a
-    non-injectable layer (the pool) sitting between two injectables."""
+    non-injectable layer (the pool) sitting between two injectables. SC1's
+    neuron shape (C=2, H=6, W=10) has three distinct dimensions on purpose."""
 
     def __init__(self, slayer: spikeLayer) -> None:
         super().__init__()
@@ -58,8 +59,8 @@ class ConvNet(nn.Module):
         self.SP1: nn.Module = slayer.pool(2)
         # dense()'s tuple inFeatures is (W, H, C), the reverse of a tensor's
         # own (C, H, W) shape (e.g. LayersInfo.shapes_neu) - SP1 outputs
-        # (C=2, H=3, W=3), so this reverses it to (3, 3, 2).
-        self.SF2: nn.Module = slayer.dense((3, 3, 2), 4)
+        # (C=2, H=3, W=5), so this reverses it to (5, 3, 2).
+        self.SF2: nn.Module = slayer.dense((5, 3, 2), 4)
 
     def forward(self, spikes_in: Tensor) -> Tensor:
         s1 = self.slayer.spike(self.slayer.psp(self.SC1(spikes_in)))
