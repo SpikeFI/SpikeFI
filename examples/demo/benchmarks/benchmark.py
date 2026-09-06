@@ -169,14 +169,11 @@ class Benchmark(ABC):
 
         t_setup = time() - t_setup
 
-        torch.cuda.synchronize()
-        t_wall = time()
         cmpn.run(test_loader, progress_mode='silent')
-        torch.cuda.synchronize()
-        t_wall = time() - t_wall
 
         accu = cmpn.performance[0].testing.accuracyLog[-1]
         t_exec = cmpn.duration
+        t_wall = cmpn.duration_wall
         del cmpn
 
         return t_exec, t_wall, t_setup, accu

@@ -21,7 +21,6 @@ from slayerSNN.slayer import spikeLayer
 import spikefi as sfi
 import spikefi.fault as sff
 from spikefi.models import DeadNeuron, DeadSynapse, SaturatedNeuron
-import spikefi.utils.io as sfio
 import spikefi.visual as sfv
 
 from nets import NetSpec
@@ -181,14 +180,10 @@ def test_export_save_load_round_trip_matches_live_plot_data(
     cmpn.run(test_loader, es_tol=0, progress_mode='silent')
 
     data_live = cmpn.export()
-    # save()'s own rename=True logic resolves this same path internally;
-    # computed here (a pure lookup, nothing is written by it) so the test
-    # never assumes a clean output directory.
-    expected_fpath = sfio.make_res_filepath(artifact_name + '.pkl', rename=True)
-    data_live.save(artifact_name)
-    assert os.path.exists(expected_fpath)
+    fpath = data_live.save(artifact_name)
+    assert os.path.exists(fpath)
 
-    data_loaded = sfi.CampaignData.load(expected_fpath)
+    data_loaded = sfi.CampaignData.load(fpath)
 
     map_live = sfv._data_mapping(data_live)
     map_loaded = sfv._data_mapping(data_loaded)

@@ -4,8 +4,7 @@ pickle-safe, and restore()'s exact (rounds-only) carrying contract.
 """
 
 
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -17,32 +16,10 @@ from slayerSNN.slayer import spikeLayer
 
 import spikefi as sfi
 import spikefi.fault as sff
-import spikefi.utils.io as sfio
 from spikefi.models import DeadNeuron, DeadSynapse, SaturatedSynapse
 
 from nets import NetSpec
 from helpers import assert_active, assert_differs, capture_run_outputs
-
-
-@contextmanager
-def _spy_saved_path() -> Generator[dict[str, str]]:
-    """Campaign.save()/CampaignData.save() both return None and the suite
-    forbids reconstructing or globbing a fixed filename, so this wraps
-    spikefi.utils.io.make_res_filepath to record the actual path it
-    returns, restoring the original function afterwards."""
-    captured: dict[str, str] = {}
-    original = sfio.make_res_filepath
-
-    def _wrapped(fname: str, rename: bool = False) -> str:
-        path = original(fname, rename)
-        captured['path'] = path
-        return path
-
-    sfio.make_res_filepath = _wrapped
-    try:
-        yield captured
-    finally:
-        sfio.make_res_filepath = original
 
 
 @pytest.mark.serialization
@@ -95,9 +72,7 @@ def test_save_load_round_trip_reproduces_identical_per_round_results(
         'The two rounds produced the same output; not a real check.'
     )
 
-    with _spy_saved_path() as saved:
-        cmpn.save()
-    path = saved['path']
+    path = cmpn.save()
 
     restored = sfi.Campaign.load(path)
     restored_outputs = capture_run_outputs(

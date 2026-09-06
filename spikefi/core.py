@@ -1175,8 +1175,8 @@ class Campaign:
     def export(self) -> 'CampaignData':
         return CampaignData(self)
 
-    def save(self, fname: str | None = None) -> None:
-        self.export().save(fname)
+    def save(self, fname: str | None = None) -> str:
+        return self.export().save(fname)
 
     def save_net(
             self,
@@ -1357,6 +1357,7 @@ class CampaignData:
         )
 
         self.duration = campaign.duration
+        self.duration_wall = campaign.duration_wall
         self.rgroups = deepcopy(campaign.rgroups)
         self.performance = deepcopy(campaign.performance)
 
@@ -1428,13 +1429,12 @@ class CampaignData:
 
         return campaign
 
-    def save(self, fname: str | None = None) -> None:
-        with open(
-            sfio.make_res_filepath(
-                (fname or self.name) + '.pkl', rename=True
-            ), 'wb'
-        ) as pkl:
+    def save(self, fname: str | None = None) -> str:
+        fpath = sfio.make_res_filepath((fname or self.name) + '.pkl', rename=True)
+        with open(fpath, 'wb') as pkl:
             pickle.dump(self, pkl)
+
+        return fpath
 
     @staticmethod
     def load(
