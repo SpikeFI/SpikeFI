@@ -177,6 +177,42 @@ class Experiment(ABC):
 
         return None
 
+    @classmethod
+    def from_args(cls, context: CaseStudyContext, args: argparse.Namespace) -> 'Experiment':
+        """Builds an instance from parsed CLI arguments.
+
+        The default implementation reads only the arguments
+        `cli._add_common_arguments` registers. A subclass that declares its
+        own arguments via `add_arguments` overrides this to also pass those
+        through to its constructor, since add_arguments alone only lets a
+        subclass declare arguments; nothing then delivers them to the
+        instance without this.
+        """
+
+        return cls(
+            context=context,
+            session=args.session,
+            tags=tuple(args.tags),
+            seed=args.seed,
+            n_warmup=args.n_warmup,
+            shuffle=not args.no_shuffle,
+            out_dir=args.out_dir
+        )
+
+    def finalize(self, trials_path: str, rounds_path: str) -> None:
+        """Overridable hook run once, at the very end of run(), after every
+        planned trial has been executed and recorded. No-op by default.
+
+        Meant for an experiment that needs to check or summarise its own
+        output once every trial is on disk, e.g. an equivalence gate
+        asserting agreement across the rows it just wrote. Not called on
+        the dry-run path, since no output exists yet to check. Analysis and
+        plotting do not belong here; they operate on the written CSVs
+        separately.
+        """
+
+        return None
+
     def run(
             self,
             dry_run: bool = False,
@@ -220,6 +256,7 @@ class Experiment(ABC):
 
         naming.write_sidecar(sidecar_path, self.config(), naming.gather_provenance())
         self._execute_schedule(final_schedule, trials_path, rounds_path, next_trial, append=resume)
+        self.finalize(trials_path, rounds_path)
 
         return trials_path
 
@@ -489,7 +526,8 @@ class Experiment(ABC):
                             'ftype': round_outcome.ftype,
                             'n_faults': round_outcome.n_faults,
                             'accuracy': round_outcome.accuracy,
-                            'n_critical': round_outcome.n_critical
+                            'n_critical': round_outcome.n_critical,
+                            'out_hash': round_outcome.out_hash
                         })
 
                 print(f"[{trial_id}] {spec.kind} done in {outcome.t_wall:.3f}s (t_rel={t_rel:.1f}s)")
@@ -498,3 +536,15 @@ class Experiment(ABC):
             trial_writer.close()
             if round_writer is not None:
                 round_writer.close()
+
+
+EXPERIMENTS: dict[str, type[Experiment]] = {}
+
+
+def register(cls: type[Experiment]) -> type[Experiment]:
+    """Class decorator registering an Experiment subclass under its own
+    `name`, so build_parser() picks it up as a subcommand automatically.
+    """
+
+    EXPERIMENTS[cls.name] = cls
+    return cls

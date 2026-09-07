@@ -18,7 +18,9 @@ TRIAL_FIELDS = (
     't_setup', 't_exec', 't_wall', 'accuracy', 'n_critical',
     'mem_alloc_base', 'mem_alloc_peak', 'mem_alloc_end', 'mem_reserved_peak', 'oom'
 )
-ROUND_FIELDS = ('session', 'trial', 'round', 'layer', 'ftype', 'n_faults', 'accuracy', 'n_critical')
+ROUND_FIELDS = (
+    'session', 'trial', 'round', 'layer', 'ftype', 'n_faults', 'accuracy', 'n_critical', 'out_hash'
+)
 
 # SAMPLE_FIELDS: a third, *_samples.csv row shape for per-sample outcomes
 # belongs here once an experiment needs it. Not yet done.
@@ -83,10 +85,12 @@ class TrialRecord:
 class RoundRecord:
     """
     One row of a *_rounds.csv: the per-round outcome of a campaign, keyed
-    back to its trial by (session, trial). Every field is required — a
-    round always knows the faults it ran and the accuracy they produced —
-    so this shape carries the accuracy detail that a TrialRecord aggregates
-    away, without widening the trial vocabulary.
+    back to its trial by (session, trial). Every field but out_hash is
+    required — a round always knows the faults it ran and the accuracy
+    they produced — so this shape carries the accuracy detail that a
+    TrialRecord aggregates away, without widening the trial vocabulary.
+    out_hash is optional and stays None except for an experiment that
+    captured the round's output tensors and can name them by digest.
     """
 
     session: int
@@ -97,6 +101,7 @@ class RoundRecord:
     n_faults: int
     accuracy: float
     n_critical: int
+    out_hash: str | None = None
 
     def as_row(self) -> dict[str, object]:
         return {field: getattr(self, field) for field in ROUND_FIELDS}

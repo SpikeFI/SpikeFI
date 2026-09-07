@@ -9,18 +9,10 @@ import demo
 from .benchmark_a import BenchmarkA
 from .benchmark_b import BenchmarkB
 from .context import CaseStudyContext
-from .experiment import Experiment
-
-EXPERIMENTS: dict[str, type[Experiment]] = {}
-
-
-def register(cls: type[Experiment]) -> type[Experiment]:
-    """Class decorator registering an Experiment subclass under its own
-    `name`, so build_parser() picks it up as a subcommand automatically.
-    """
-
-    EXPERIMENTS[cls.name] = cls
-    return cls
+from .experiment import EXPERIMENTS
+# Importing experiments here is what runs each experiment module's
+# @register decorator and populates EXPERIMENTS as a side effect.
+from . import experiments  # noqa: F401
 
 
 def run_a() -> None:
@@ -112,15 +104,7 @@ def main(argv: list[str] | None = None) -> None:
 
     experiment_cls = EXPERIMENTS[args.command]
     context = CaseStudyContext(args.casestudy)
-    experiment = experiment_cls(
-        context=context,
-        session=args.session,
-        tags=tuple(args.tags),
-        seed=args.seed,
-        n_warmup=args.n_warmup,
-        shuffle=not args.no_shuffle,
-        out_dir=args.out_dir
-    )
+    experiment = experiment_cls.from_args(context, args)
 
     path = experiment.run(dry_run=args.dry_run, resume=args.resume, run_unresolvable=args.run_unresolvable)
     print(path)
