@@ -252,6 +252,9 @@ class FaultModel:
 
 
 class Fault:
+    # Unrolled site indices set by cache_unrolled(), None when not cached.
+    _unrolled: tuple[Tensor, ...] | None = None
+
     def __init__(
             self,
             model: FaultModel,
@@ -352,7 +355,17 @@ class Fault:
     def is_multiple(self) -> bool:
         return len(self) > 1
 
+    def cache_unrolled(self, device: torch.device | None = None) -> None:
+        self.clear_unrolled()
+        self._unrolled = tuple(idx.to(device) for idx in self.unroll())
+
+    def clear_unrolled(self) -> None:
+        self._unrolled = None
+
     def unroll(self) -> tuple[Tensor, ...]:
+        if self._unrolled is not None:
+            return self._unrolled
+
         sites = sorted(self.sites, key=lambda s: s.position)
         # Grouped unrolled site indices per dimension
         # Sort by position for a canonical, deterministic order

@@ -357,6 +357,51 @@ def test_returned_net_output_survives_campaign_deletion(
     assert torch.equal(before, after)
 
 
+@pytest.mark.neuron
+@pytest.mark.training
+@pytest.mark.serialization
+def test_returned_net_and_its_saved_copy_ignore_later_campaign_ejects(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        net_params: dict,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        tiny_loaders: Callable[..., tuple[DataLoader, DataLoader]]
+) -> None:
+    """A returned net is fixed with the faults it was trained with, so
+    ejecting one of its round's two neuron fault sites from the campaign
+    afterwards must change neither the net's own output nor what
+    save_net()/load_net() reproduces for that round. Both sites are active,
+    so a hook still reading the campaign's live round would stop silencing
+    the ejected one and the output would move."""
+    cmpn = make_campaign(dense_net.net, dense_net.shape_in, slayer)
+    train_loader, test_loader = tiny_loaders(dense_net.shape_in)
+    x, _ = next(iter(test_loader))
+    device = next(dense_net.net.parameters()).device
+
+    golden_sf1 = cmpn.golden(x, 0, 0)
+    active = [c for c in range(4) if golden_sf1[:, c, 0, 0, :].sum() > 0]
+    assert len(active) >= 2, 'Two active SF1 sites are needed for the eject to be visible.'
+    sites = [sff.FaultSite('SF1', (c, 0, 0)) for c in active[:2]]
+
+    cmpn.inject(sff.Fault(DeadNeuron(), sites), round_idx=0)
+
+    spike_loss = snn.loss(net_params).to(device)
+    faulties = cmpn.run_train(
+        1, train_loader, test_loader, spike_loss,
+        lambda params: torch.optim.Adam(params, lr=1e-2), progress_mode='silent'
+    )
+    expected = _capture_sf2_input(faulties[0], x)
+
+    cmpn.eject(sff.Fault(DeadNeuron(), sites[1]), round_idx=0)
+    # Guard: the eject really reached the campaign's own round
+    assert len(cmpn.rounds[0].get_faults()[0]) == 1
+
+    assert torch.equal(_capture_sf2_input(faulties[0], x), expected)
+
+    loaded = sfi.Campaign.load_net(cmpn.save_net(0), dense_net.net, device)
+    assert torch.equal(_capture_sf2_input(loaded, x), expected)
+
+
 @pytest.mark.training
 def test_dispatching_hooks_stay_empty_and_direct_hooks_are_keyed_by_round_and_layer(
         dense_net: NetSpec,

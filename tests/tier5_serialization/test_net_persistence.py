@@ -237,6 +237,47 @@ def test_post_training_save_net_state_dict_is_independent_of_a_prior_run(
 
 
 @pytest.mark.serialization
+@pytest.mark.training
+@pytest.mark.synapse
+def test_save_net_after_run_following_run_train_saves_the_post_training_net(
+        dense_net: NetSpec,
+        slayer: spikeLayer,
+        net_params: dict,
+        make_campaign: Callable[[nn.Module, tuple[int, int, int], spikeLayer], sfi.Campaign],
+        tiny_loaders: Callable[..., tuple[DataLoader, DataLoader]]
+) -> None:
+    """A run() after run_train() makes the campaign a post-training one
+    again, so save_net() must write golden's weights with the round's
+    synapse fault baked in, not the net the earlier run_train() trained --
+    while the list of nets run_train() returned stays intact for its
+    caller."""
+    cmpn = make_campaign(dense_net.net, dense_net.shape_in, slayer)
+    train_loader, test_loader = tiny_loaders(dense_net.shape_in)
+    device = next(dense_net.net.parameters()).device
+
+    site = (0, 0, 0, 0)
+    cmpn.inject(sff.Fault(StuckSynapse(0.42), sff.FaultSite('SF1', site)), round_idx=0)
+
+    spike_loss = snn.loss(net_params).to(device)
+    faulties = cmpn.run_train(
+        1, train_loader, test_loader, spike_loss,
+        lambda params: torch.optim.Adam(params, lr=1e-2), progress_mode='silent'
+    )
+    # Guard: training moved the weights, so the trained net is
+    # distinguishable from golden's own
+    assert not torch.equal(faulties[0].SF2.weight, cmpn.golden.SF2.weight)
+
+    cmpn.run(test_loader, progress_mode='silent')
+    assert len(faulties) == 1 and cmpn.faulties == []
+
+    state = torch.load(cmpn.save_net(0), map_location=device, weights_only=False)['state_dict']
+    expected_sf1 = cmpn.golden.SF1.weight.detach().clone()
+    expected_sf1[site] = 0.42
+    assert torch.equal(state['SF1.weight'], expected_sf1)
+    assert torch.equal(state['SF2.weight'], cmpn.golden.SF2.weight)
+
+
+@pytest.mark.serialization
 def test_load_net_accepts_a_plain_state_dict_file(
         conv_net: NetSpec,
         fixed_input: Callable[..., Tensor],

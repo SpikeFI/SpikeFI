@@ -11,8 +11,8 @@ artifacts are named.
 | 1 | `tier1_semantics/` | fault semantics (exact/differential/cross-path oracles) | GPU | 25 | ~0.8 s |
 | 2 | `tier2_propagation/` | a fault's local effect reaches the next layer | GPU | 4 | ~0.6 s |
 | 3 | `tier3_invariants/` | metamorphic invariants: O0-O4 agreement, round isolation, `eject()` | GPU | 25 | ~1.2 s |
-| 4 | `tier4_training/` | training mode: `run_train`, self-containment, persistent-fault semantics, best-epoch checkpointing | GPU | 14 | ~2.5 s |
-| 5 | `tier5_serialization/` | `save`/`load`/`export`, `save_net`/`load_net`, copy semantics | GPU | 15 | ~2.5 s |
+| 4 | `tier4_training/` | training mode: `run_train`, self-containment, persistent-fault semantics, best-epoch checkpointing | GPU | 15 | ~2.5 s |
+| 5 | `tier5_serialization/` | `save`/`load`/`export`, `save_net`/`load_net`, copy semantics | GPU | 16 | ~2.5 s |
 | 6 | `tier6_visual/` | `visual.py` correctness (data mapping, titles) | GPU | 10 | ~2.6 s |
 
 `test_coverage_matrix.py` sits directly under `tests/` and is tier-agnostic: parametrized over
@@ -25,8 +25,8 @@ registry line is added, which is what then sweeps it through the generic `pertur
 Every tier but Tier 0 needs CUDA (slayer's spike/psp kernels are CUDA-only) and is skipped
 automatically when unavailable. Living outside the tier directories, the coverage
 matrix gets no marker from the collection hook and declares `gpu` per test instead, so its
-pure-Python registry checks still run on a CPU-only machine. The suite currently runs **203 tests**
-(155 across the tiers above + 48 in the coverage matrix) in **~5 s** on GPU (measured on a
+pure-Python registry checks still run on a CPU-only machine. The suite currently runs **205 tests**
+(157 across the tiers above + 48 in the coverage matrix) in **~5 s** on GPU (measured on a
 Quadro RTX 4000).
 
 ## Running

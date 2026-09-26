@@ -15,7 +15,8 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Generator, Iterable
+from contextlib import contextmanager
 from copy import deepcopy
 from enum import Enum
 from glob import glob
@@ -99,6 +100,7 @@ class Campaign:
         self.orounds: list[sff.OptimizedFaultRound] = []
         self.rgroups: dict[str, list[int]] = {}
         self.performance: list[spikeStats] = []
+        self.faulties: list[nn.Module] = []
 
         self.dispatching_hooks: dict[tuple[str, type], sfh.DispatchingFaultHook] = {}
         self.direct_hooks: dict[
@@ -524,6 +526,7 @@ class Campaign:
         self.performance.clear()
         self.dispatching_hooks.clear()
         self.direct_hooks.clear()
+        self.faulties = []
 
         # Create faulty version of network
         self.faulty = deepcopy(self.golden)
@@ -598,7 +601,14 @@ class Campaign:
             faulties.append(_faulty)
             self.performance.append(spikeStats())
 
-            self._perturb_net_train(r, round, _faulty)
+            # Each faulty net keeps a private, permanently cached copy
+            # of its round, unaffected by later changes to self.rounds
+            _round = deepcopy(round)
+            for f in _round.values():
+                f.cache_unrolled(self.device)
+            _faulty.fault_round = _round
+
+            self._perturb_net_train(r, _round, _faulty)
 
         return faulties
 
@@ -617,56 +627,70 @@ class Campaign:
             torch.cuda.synchronize(self.device)
         t_wall = time()
 
-        self._pre_run(opt)
+        with self._cached_unrolled():
+            self._pre_run(opt)
 
-        # Initialize and refresh progress
-        self.progress = CampaignProgress(
-            len(test_loader), len(self.rounds), mode=progress_mode
-        )
-        self._progress_thread = self._start_progress_thread(progress_mode)
-
-        # Decide optimization level
-        if len(self.rounds) <= 1:
-            self.progress.step_round()
-            evaluate_method = self._evaluate_single
-            opt = CampaignOptimization.O0
-        else:
-            if opt.value >= CampaignOptimization.O2.value:
-                evaluate_method = self._evaluate_optimized
-            elif opt == CampaignOptimization.O1:
-                evaluate_method = self._evaluate_O1
-            else:
-                evaluate_method = self._evaluate_O0
-
-        # Evaluate faults' effects
-        with torch.inference_mode():
-            # Passed by keyword, not position:
-            # the four _evaluate_* methods don't share one signature
-            eval_kwargs = dict(
-                test_loader=test_loader,
-                spike_loss=spike_loss,
-                compute_critical=compute_critical
+            # Initialize and refresh progress
+            self.progress = CampaignProgress(
+                len(test_loader), len(self.rounds), mode=progress_mode
             )
-            if opt.value >= CampaignOptimization.O2.value:
-                eval_kwargs['es_tol'] = es_tol
+            self._progress_thread = self._start_progress_thread(progress_mode)
 
-            # Explicit sync on both ends: don't let async work left
-            # over from _pre_run bleed into the measured window.
-            if self.device.type == 'cuda':
-                torch.cuda.synchronize(self.device)
-            self.progress.timer()
-            N_critical = evaluate_method(**eval_kwargs)
-            if self.device.type == 'cuda':
-                torch.cuda.synchronize(self.device)
-            self.progress.timer()
+            # Decide optimization level
+            if len(self.rounds) <= 1:
+                self.progress.step_round()
+                evaluate_method = self._evaluate_single
+                opt = CampaignOptimization.O0
+            else:
+                if opt.value >= CampaignOptimization.O2.value:
+                    evaluate_method = self._evaluate_optimized
+                elif opt == CampaignOptimization.O1:
+                    evaluate_method = self._evaluate_O1
+                else:
+                    evaluate_method = self._evaluate_O0
 
-        self._post_run()
+            # Evaluate faults' effects
+            with torch.inference_mode():
+                # Passed by keyword, not position:
+                # the four _evaluate_* methods don't share one signature
+                eval_kwargs = dict(
+                    test_loader=test_loader,
+                    spike_loss=spike_loss,
+                    compute_critical=compute_critical
+                )
+                if opt.value >= CampaignOptimization.O2.value:
+                    eval_kwargs['es_tol'] = es_tol
+
+                # Explicit sync on both ends: don't let async work left
+                # over from _pre_run bleed into the measured window.
+                if self.device.type == 'cuda':
+                    torch.cuda.synchronize(self.device)
+                self.progress.timer()
+                N_critical = evaluate_method(**eval_kwargs)
+                if self.device.type == 'cuda':
+                    torch.cuda.synchronize(self.device)
+                self.progress.timer()
+
+            self._post_run()
 
         if self.device.type == 'cuda':
             torch.cuda.synchronize(self.device)
         self.duration_wall = time() - t_wall
 
         return N_critical
+
+    @contextmanager
+    def _cached_unrolled(self) -> Generator[None, None, None]:
+        # A campaign's faults stay unchanged while it runs
+        faults = [f for round in self.rounds for f in round.values()]
+        for f in faults:
+            f.cache_unrolled(self.device)
+
+        try:
+            yield
+        finally:
+            for f in faults:
+                f.clear_unrolled()
 
     def _start_progress_thread(
             self,
@@ -1184,17 +1208,13 @@ class Campaign:
             fname: str | None = None,
             rename: bool = True
     ) -> str:
-        round = self.rounds[round_idx]
-
-        if hasattr(self, 'faulties'):
-            # Pre-training campaign: each round trained its own net, so
-            # synapse faults are already baked into its weights.
+        if self.faulties:
+            # Synapse faults are already baked into the weights
             to_save = self.faulties[round_idx]
+            round = to_save.fault_round
         else:
-            # Post-training (or golden) campaign: self.faulty is shared
-            # across rounds and its weights are restored after every
-            # forward pass, so build a private copy and write this round's
-            # synapse faults directly into golden's own weights instead.
+            round = self.rounds[round_idx]
+            # Inject synapse faults in a copy of the golden net
             to_save = deepcopy(self.golden)
             with torch.no_grad():
                 for layer_name in self.layers_info.get_injectables():
@@ -1207,12 +1227,16 @@ class Campaign:
                         layer.weight[all_ind] = fault.model.perturb(layer.weight[all_ind])
 
         if round:
-            # Hard and parametric neuron faults cannot be baked into weights,
-            # so the round travels alongside the state_dict for load_net to
-            # reattach their hooks.
+            # Hard and parametric neuron faults need the fault round to travel
+            #  alongside the state_dict for load_net to reattach their hooks.
+            # The saved copy leaves the unrolled site indices cache behind.
+            saved_round = deepcopy(round)
+            for f in saved_round.values():
+                f.clear_unrolled()
+
             payload = {
                 'state_dict': to_save.state_dict(),
-                'round': deepcopy(round),
+                'round': saved_round,
                 'layers_info': deepcopy(self.layers_info),
                 'slayer': deepcopy(self.slayer),
             }
@@ -1260,6 +1284,11 @@ class Campaign:
             )
 
         if round:
+            # Cache the unrolled site indices to be used in net's hooks
+            for f in round.values():
+                f.cache_unrolled(device)
+            faulty.fault_round = round
+
             Campaign._attach_direct_neuron_hooks(
                 faulty, round, layers_info, slayer, device, position_ref
             )
